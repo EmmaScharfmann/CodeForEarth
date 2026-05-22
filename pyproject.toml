@@ -1,0 +1,39 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "package_name"
+version = "0.1.0"
+description = "A pip package for the code for earth projet."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Emma Scharfmann", email = "scharfmann.emma@gmail.com" },
+    { name = "Quentin Nicolas", email = "quentin.nicolas@env.ethz.ch" },
+    { name = "Nora Zilibotti", email = "nora.zilibotti@env.ethz.ch" },
+    { name = "Vishnupriya Selvakumar", email = "vishnupriya.selvakumar@env.ethz.ch" },
+]
+keywords = []
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+dependencies = []
+
+[project.optional-dependencies]
+dev = ["pytest", "pytest-cov", "ruff", "mypy"]
+
+[project.urls]
+Homepage = "https://github.com/EmmaScharfmann/CodeForEarth"
+Issues = "https://github.com/EmmaScharfmann/CodeForEarth/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["package_name*"]
+
+[tool.ruff]
+line-length = 88
+
