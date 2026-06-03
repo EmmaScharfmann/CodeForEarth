@@ -1,0 +1,16 @@
+jupyter
+tensorflow
+keras
+scikit-learn
+pandas
+numpy
+xarray
+scipy
+xesmf
+matplotlib
+cartopy
+seaborn
+esmpy
+netCDF4
+pydot
+graphviz
