@@ -2,7 +2,7 @@ from tensorflow import Tensor
 from tensorflow.keras.losses import mse, categorical_crossentropy
 import tensorflow as tf
 
-from cleaner_code_for_cmmvae.training.model import (
+from package_name.training.utils import (
     Loss,
     EncoderInput,
     DecoderOutput,

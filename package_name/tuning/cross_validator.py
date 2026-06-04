@@ -1,14 +1,12 @@
 import numpy as np
 import tensorflow as tf
 
-from cleaner_code_for_cmmvae.training.trainer import VAETrainer
+from package_name.training.vae import VAE
 
 
 class CrossValidator:
-    def __init__(
-        self, trainer: VAETrainer, filepath: str, cluster_number: int, n_runs: int = 20
-    ):
-        self.trainer = trainer
+    def __init__(self, vae: VAE, filepath: str, cluster_number: int, n_runs: int = 20):
+        self.vae = vae
         self.filepath = filepath
         self.cluster_number = cluster_number
         self.n_runs = n_runs
@@ -46,23 +44,22 @@ class CrossValidator:
         initial_weights_path = self._construct_initial_weights_path()
         final_weights_path = self._construct_final_weights_path(run_id)
 
-        self.trainer.load_initial_weights(path=initial_weights_path)
+        self.vae.initialize_weights_from(path=initial_weights_path)
 
-        history = self.trainer.fit(
+        history = self.vae.fit(
             X=X,
             y=y,
             epochs=epochs,
-            filepath=initial_weights_path,
         )
 
-        self.trainer.save_weights(path=final_weights_path)
+        self.vae.save_weights(path=final_weights_path)
 
         return history
 
     def _construct_initial_weights_path(self) -> str:
         """Construct the path where the initial weights are stored."""
-        return f"{self.filepath}random_weights_{self.cluster_number}.h5"
+        return f"{self.filepath}random_weights_{self.cluster_number}.weights.h5"
 
     def _construct_final_weights_path(self, run_id: int) -> str:
         """Construct the path where the final weights are stored for the given run ID."""
-        return f"{self.filepath}final_weights_{self.cluster_number}_{run_id}.h5"
+        return f"{self.filepath}final_weights_{self.cluster_number}_{run_id}.weights.h5"
