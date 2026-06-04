@@ -2,7 +2,7 @@ import keras
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.models import Model
 
-from cleaner_code_for_cmmvae.training.model import DecoderConfig
+from package_name.training.utils import DecoderConfig
 
 
 class DecoderBuilder:

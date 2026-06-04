@@ -2,7 +2,7 @@ import keras
 from tensorflow.keras.layers import Input, Dense, Reshape, Lambda
 from tensorflow.keras.models import Model
 
-from cleaner_code_for_cmmvae.training.model import EncoderConfig
+from package_name.training.utils import EncoderConfig
 
 
 class EncoderBuilder:
@@ -32,9 +32,9 @@ class EncoderBuilder:
     def _format_inputs(self) -> dict[str, keras.KerasTensor]:
         """Format input as specified in the given config."""
         cfg = self.cfg
-        x = Input(shape=cfg.input_shape, name="encoder_input")
+        x = Input(shape=cfg.input_shape, name="x")
         dummy = Input(shape=(1,), name="dummy")
-        r = Input(shape=cfg.input_shape_r, name="ground_truth")
+        r = Input(shape=cfg.input_shape_r, name="r")
 
         return {
             "x": x,
