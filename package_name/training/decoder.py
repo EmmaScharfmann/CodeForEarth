@@ -1,4 +1,5 @@
 import keras
+import tensorflow as tf
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.models import Model
 
@@ -20,7 +21,9 @@ class DecoderBuilder:
         """Create the latent input from the given config."""
         return Input(shape=(self.cfg.latent_dim,), name="z")
 
-    def _build_decoder_network(self, encoded_vector:  keras.KerasTensor) -> keras.KerasTensor:
+    def _build_decoder_network(
+        self, encoded_vector: keras.KerasTensor
+    ) -> keras.KerasTensor:
         """
         Decode the given vector to a vector of higher dimension.
 

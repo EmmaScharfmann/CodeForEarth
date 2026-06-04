@@ -1,23 +1,37 @@
-from typing import Tuple, Dict
 import numpy as np
 import tensorflow as tf
+from sklearn.model_selection import train_test_split
 
 
-class VAEDataModule:
-    def __init__(self, batch_size: int) -> None:
-        self.batch_size = batch_size
+def format_input_to_dataset(
+    inputs: dict[str, np.ndarray], batch_size: int
+) -> tf.data.Dataset:
+    """
+    Convert a dictionary of NumPy arrays into a batched TensorFlow dataset,
+    for which each value must contain the same number of samples along
+    the first dimension.
 
-    def to_dataset(self, inputs: Dict[str, np.ndarray]) -> tf.data.Dataset:
-        ds = tf.data.Dataset.from_tensor_slices(inputs)
-        return ds.batch(self.batch_size)
+    :param inputs:      A dictionary mapping feature names to NumPy arrays.
+    :param batch_size:  The number of samples per batch.
+    :return:            A batched ``tf.data.Dataset`` yielding dictionaries of tensors.
+    """
+    ds = tf.data.Dataset.from_tensor_slices(inputs)
+    return ds.batch(batch_size)
 
 
 def train_val_split(
     X: np.ndarray,
     y: np.ndarray,
     test_size: float = 0.3,
-) -> Tuple[Dict[str, np.ndarray], Dict[str, np.ndarray]]:
-    from sklearn.model_selection import train_test_split
+) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
+    """
+    Split the data into training and validation sets.
+
+    :param X:         The input data to split.
+    :param y:         The target data to split.
+    :param test_size: The proportion of the data to be used for validation.
+    :return:          A tuple containing the training and validation sets.
+    """
 
     X_train_raw, X_val_raw, y_train, y_val = train_test_split(X, y, test_size=test_size)
 
@@ -31,6 +45,7 @@ def train_val_split(
 
 
 def _flatten(X: np.ndarray) -> np.ndarray:
+    """Flatten the input array into a numpy array."""
     nt, ny, nx = X.shape
     return np.reshape(X, (nt, ny * nx), order="F")
 
@@ -38,9 +53,9 @@ def _flatten(X: np.ndarray) -> np.ndarray:
 def _build_inputs(
     X: np.ndarray,
     y: np.ndarray,
-) -> Dict[str, np.ndarray]:
+) -> dict[str, np.ndarray]:
+    """Format the input arrays as a dictionary to feed to the model."""
     dummy = np.ones((X.shape[0], 1))
-
     return {
         "x": X,
         "dummy": dummy,

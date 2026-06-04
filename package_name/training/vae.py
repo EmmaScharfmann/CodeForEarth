@@ -3,6 +3,7 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 
 from package_name.data_processing import data_processor
+from package_name.training import utils
 from package_name.training.decoder import DecoderBuilder
 from package_name.training.encoder import EncoderBuilder
 from package_name.training.loss import VAELoss
@@ -14,7 +15,6 @@ class VAE:
     def __init__(
         self,
         cfg: VAEConfig,
-        batch_size: int,
         reconstruction_loss_factor: float = 0.5,
         path_for_weights_initialization: str | None = None,
     ) -> None:
@@ -25,7 +25,6 @@ class VAE:
             pr_cluster_number=cfg.pr_cluster_number,
         )
         self.path_for_weights_initialization = path_for_weights_initialization
-        self.data_module = data_processor.VAEDataModule(batch_size=batch_size)
 
         encoder_config = EncoderConfig(
             input_shape=(cfg.original_dim,),
@@ -83,12 +82,17 @@ class VAE:
         X: np.ndarray,
         y: np.ndarray,
         epochs: int,
+        batch_size: int,
     ) -> tf.keras.callbacks.History:
         """TODO"""
         train_inputs, val_inputs = data_processor.train_val_split(X=X, y=y)
 
-        train_ds = self.data_module.to_dataset(train_inputs)
-        val_ds = self.data_module.to_dataset(val_inputs)
+        train_ds = data_processor.format_input_to_dataset(
+            inputs=train_inputs, batch_size=batch_size
+        )
+        val_ds = data_processor.format_input_to_dataset(
+            inputs=val_inputs, batch_size=batch_size
+        )
 
         history = self._model.fit(
             train_ds,
