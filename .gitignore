@@ -220,5 +220,8 @@ __marimo__/
 # Mac extensions
 .DS_Store
 
-# Pycharm
+# Pycharm stuff
 .idea/*
+
+# Model weights
+*.h5
