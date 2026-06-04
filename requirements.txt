@@ -10,7 +10,6 @@ xesmf
 matplotlib
 cartopy
 seaborn
-esmpy
 netCDF4
 pydot
 graphviz

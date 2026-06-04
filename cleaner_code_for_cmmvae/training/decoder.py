@@ -1,6 +1,6 @@
+import keras
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.models import Model
-from keras.src.engine.keras_tensor import KerasTensor
 
 from cleaner_code_for_cmmvae.training.model import DecoderConfig
 
@@ -16,11 +16,11 @@ class DecoderBuilder:
 
         return Model(inputs={"z": z}, outputs={"x_recon": outputs}, name="decoder")
 
-    def _create_latent_input(self) -> KerasTensor:
+    def _create_latent_input(self) -> keras.KerasTensor:
         """Create the latent input from the given config."""
         return Input(shape=(self.cfg.latent_dim,), name="z")
 
-    def _build_decoder_network(self, encoded_vector: KerasTensor) -> KerasTensor:
+    def _build_decoder_network(self, encoded_vector:  keras.KerasTensor) -> keras.KerasTensor:
         """
         Decode the given vector to a vector of higher dimension.
 
