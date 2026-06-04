@@ -1,7 +1,8 @@
 from dataclasses import dataclass
 from typing import Callable
+
+import keras
 import tensorflow as tf
-from keras.src.engine.keras_tensor import KerasTensor
 
 
 @dataclass
@@ -44,16 +45,16 @@ class DecoderConfig:
 
 @dataclass
 class EncoderInput:
-    x: KerasTensor
-    dummy: KerasTensor
-    r: KerasTensor
+    x: keras.KerasTensor
+    dummy: keras.KerasTensor
+    r: keras.KerasTensor
 
 
 @dataclass
 class LatentSpace:
-    z_mean: tf.Tensor
-    z_log_var: tf.Tensor
-    z: tf.Tensor
+    z_mean: keras.KerasTensor
+    z_log_var: keras.KerasTensor
+    z: keras.KerasTensor
 
 
 @dataclass
@@ -78,7 +79,7 @@ class EncoderOutput:
 
 @dataclass
 class DecoderOutput:
-    x_recon: KerasTensor
+    x_recon: keras.KerasTensor
 
 
 @dataclass

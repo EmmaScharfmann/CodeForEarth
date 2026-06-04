@@ -1,6 +1,6 @@
+import keras
 from tensorflow.keras.layers import Input, Dense, Reshape, Lambda
 from tensorflow.keras.models import Model
-from keras.src.engine.keras_tensor import KerasTensor
 
 from cleaner_code_for_cmmvae.training.model import EncoderConfig
 
@@ -29,7 +29,7 @@ class EncoderBuilder:
             name="encoder",
         )
 
-    def _format_inputs(self) -> dict[str, KerasTensor]:
+    def _format_inputs(self) -> dict[str, keras.KerasTensor]:
         """Format input as specified in the given config."""
         cfg = self.cfg
         x = Input(shape=cfg.input_shape, name="encoder_input")
@@ -42,7 +42,7 @@ class EncoderBuilder:
             "r": r,
         }
 
-    def _reduce_vector_size(self, vector_input: KerasTensor) -> KerasTensor:
+    def _reduce_vector_size(self, vector_input: keras.KerasTensor) -> keras.KerasTensor:
         """
         Encode the vector input to a vector of lower dimension.
 
@@ -59,7 +59,7 @@ class EncoderBuilder:
 
         return x
 
-    def _build_latent_space(self, x_reduced: KerasTensor):
+    def _build_latent_space(self, x_reduced: keras.KerasTensor):
         """
         Converts the given encoded vector into a probabilistic representation.
 
@@ -74,7 +74,7 @@ class EncoderBuilder:
 
         return {"z_mean": z_mean, "z_log_var": z_log_var, "z": z}
 
-    def _build_mixture_components(self, dummy_input: KerasTensor):
+    def _build_mixture_components(self, dummy_input: keras.KerasTensor):
         """
         TODO
         """
@@ -93,7 +93,7 @@ class EncoderBuilder:
 
         return {"mu": mu, "pi": pi}
 
-    def _build_aux_outputs(self, aux_input: KerasTensor):
+    def _build_aux_outputs(self, aux_input: keras.KerasTensor):
         """
         TODO
         """
