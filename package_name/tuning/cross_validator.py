@@ -12,23 +12,22 @@ class CrossValidator:
         self.n_runs = n_runs
 
     def run(
-        self,
-        X: np.ndarray,
-        y: np.ndarray,
-        epochs: int,
+        self, X: np.ndarray, y: np.ndarray, epochs: int, batch_size: int
     ) -> list[tf.keras.callbacks.History]:
         """
         Run the cross validation for the given parameters and save the weights.
 
-        :param X:       The input data the cross validation is run for.
-        :param y:       The output data the cross validation is run for.
-        :param epochs:  The number of epochs the cross validation is run for.
-        :return:        The list of histories the cross validation is run for.
+        :param X:           The input data the cross validation is run for.
+        :param y:           The output data the cross validation is run for.
+        :param epochs:      The number of epochs the cross validation is run for.
+        :param batch_size:  The batch size the cross validation is run for.
+        :return:            The list of histories the cross validation is run for.
         """
         histories: list[tf.keras.callbacks.History] = []
-
         for i in range(self.n_runs):
-            history = self._single_run(X, y, epochs, run_id=i)
+            history = self._single_run(
+                X=X, y=y, epochs=epochs, run_id=i, batch_size=batch_size
+            )
             histories.append(history)
 
         return histories
@@ -38,6 +37,7 @@ class CrossValidator:
         X: np.ndarray,
         y: np.ndarray,
         epochs: int,
+        batch_size: int,
         run_id: int,
     ) -> tf.keras.callbacks.History:
         """Run the training for the given parameters and save the weights."""
@@ -46,11 +46,7 @@ class CrossValidator:
 
         self.vae.initialize_weights_from(path=initial_weights_path)
 
-        history = self.vae.fit(
-            X=X,
-            y=y,
-            epochs=epochs,
-        )
+        history = self.vae.fit(X=X, y=y, epochs=epochs, batch_size=batch_size)
 
         self.vae.save_weights(path=final_weights_path)
 
