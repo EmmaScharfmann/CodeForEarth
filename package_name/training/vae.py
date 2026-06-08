@@ -3,7 +3,6 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 
 from package_name.data_processing import data_processor
-from package_name.training import utils
 from package_name.training.decoder import DecoderBuilder
 from package_name.training.encoder import EncoderBuilder
 from package_name.training.loss import VAELoss
@@ -73,7 +72,7 @@ class VAE:
         """
         self._model.load_weights(path)
 
-    def compile(self):
+    def compile(self) -> None:
         """Compile the model."""
         self._model.compile(optimizer="adam")
 
@@ -84,7 +83,15 @@ class VAE:
         epochs: int,
         batch_size: int,
     ) -> tf.keras.callbacks.History:
-        """TODO"""
+        """
+        Fit the model to the given training data.
+
+        :param X:           The input `X` to be fitted.
+        :param y:           The output `y` to be fitted.
+        :param epochs:      The number of epochs to train the model.
+        :param batch_size:  The batch size to train the model.
+        :return:            The history of the model.
+        """
         train_inputs, val_inputs = data_processor.train_val_split(X=X, y=y)
 
         train_ds = data_processor.format_input_to_dataset(

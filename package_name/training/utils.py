@@ -104,8 +104,13 @@ class Loss:
         )
 
 
-
 def format_encoder_output_as_object(encoder_output: dict) -> EncoderOutput:
+    """
+    Format the encoder output as an object.
+
+    :param encoder_output:  The encoder output to format.
+    :return:                The formatted output.
+    """
     latent_input = LatentSpace(
         z=encoder_output["latent"]["z"],
         z_mean=encoder_output["latent"]["z_mean"],
@@ -135,6 +140,12 @@ def format_encoder_output_as_object(encoder_output: dict) -> EncoderOutput:
 def format_decoder_output_as_object(
     decoder_output: dict,
 ) -> DecoderOutput:
+    """
+    Format the decoder output as an object.
+
+    :param decoder_output:  The decoder output to format.
+    :return:                The formatted output.
+    """
     decoder_output = DecoderOutput(x_recon=decoder_output["x_recon"])
     return decoder_output
 
@@ -142,14 +153,25 @@ def format_decoder_output_as_object(
 def format_encoder_input_as_object(
     encoder_input: dict,
 ) -> EncoderInput:
-    decoder_output = EncoderInput(
+    """
+    Format the encoder input as an object.
+
+    :param encoder_input:  The encoder input to format.
+    :return:               The formatted input.
+    """
+    encoder_input = EncoderInput(
         x=encoder_input["x"], dummy=encoder_input["dummy"], r=encoder_input["r"]
     )
-    return decoder_output
+    return encoder_input
 
 
-def sampling(args):
-    """TODO"""
+def sampling(args: tuple[tf.Tensor, float]) -> tf.Tensor:
+    """
+    Sample a latent vector from a Gaussian distribution using the reparameterization trick.
+
+    :param args: Tuple ``(z_mean, z_log_sigma)`` containing the latent mean and log-variance tensors.
+    :return:     A sampled latent tensor with the same shape as ``z_mean``.
+    """
     z_mean, z_log_sigma = args
     epsilon = K.random_normal(
         shape=(K.shape(z_mean)[0], K.int_shape(z_mean)[1]), mean=0.0, stddev=1.0

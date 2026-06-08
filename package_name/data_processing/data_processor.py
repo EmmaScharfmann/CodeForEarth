@@ -32,7 +32,6 @@ def train_val_split(
     :param test_size: The proportion of the data to be used for validation.
     :return:          A tuple containing the training and validation sets.
     """
-
     X_train_raw, X_val_raw, y_train, y_val = train_test_split(X, y, test_size=test_size)
 
     X_train = _flatten(X=X_train_raw)

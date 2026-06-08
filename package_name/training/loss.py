@@ -71,7 +71,7 @@ class VAELoss:
     def _target(
         self, encoder_input: EncoderInput, auxiliary_output: AuxiliaryOutput
     ) -> Tensor:
-        """"""
+        """Calculate the target of the given inputs and outputs."""
         r_true = tf.cast(encoder_input.r, tf.float32)
         r_pred = auxiliary_output.r
 
@@ -82,13 +82,14 @@ class VAELoss:
 
 
 def _cluster_prediction(auxiliary_output: AuxiliaryOutput) -> Tensor:
-    """"""
+    """Calculate the categorical cross-entropy for the given auxiliary output."""
     return categorical_crossentropy(auxiliary_output.c, auxiliary_output.cr)
 
 
 def _kl_categorical(
     mixture_output: MixtureComponents, auxiliary_output: AuxiliaryOutput
 ) -> Tensor:
+    """Calculate the KL loss for the categorical components."""
     c = auxiliary_output.c
     pi = mixture_output.pi
 
@@ -99,6 +100,7 @@ def _kl_categorical(
 
 
 def _dirichlet(mixture_output: MixtureComponents) -> Tensor:
+    """Calculate the dirichlet loss for the given mixture components and auxiliary output."""
     pi = mixture_output.pi
     dir_prior = -0.5 * tf.math.log(pi)
     return tf.reduce_sum(dir_prior, axis=-1)
@@ -107,6 +109,7 @@ def _dirichlet(mixture_output: MixtureComponents) -> Tensor:
 def _kl_gaussian(
     latent_space_output: LatentSpace, mixture_output: MixtureComponents
 ) -> Tensor:
+    """Calculate the KL loss for the gaussian components."""
     z_mean = latent_space_output.z_mean
     z_log_var = latent_space_output.z_log_var
     mu = mixture_output.mu

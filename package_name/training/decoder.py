@@ -1,5 +1,4 @@
 import keras
-import tensorflow as tf
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.models import Model
 
@@ -11,7 +10,11 @@ class DecoderBuilder:
         self.cfg = config
 
     def build(self) -> Model:
-        """Build the decoder model."""
+        """
+        Build the decoder model.
+
+        :return:    The decoder model.
+        """
         z = self._create_latent_input()
         outputs = self._build_decoder_network(encoded_vector=z)
 
@@ -24,12 +27,7 @@ class DecoderBuilder:
     def _build_decoder_network(
         self, encoded_vector: keras.KerasTensor
     ) -> keras.KerasTensor:
-        """
-        Decode the given vector to a vector of higher dimension.
-
-        :param encoded_vector:    The vector to encode.
-        :return:                  The decoded representation of the given vector.
-        """
+        """Decode the given vector to a vector of higher dimension."""
         cfg = self.cfg
 
         x = Dense(cfg.dim_layer3, activation=cfg.activation, name="dec_dense_1")(
