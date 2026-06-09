@@ -1,2 +1,0 @@
-def loader():
-    raise NotImplemented()
