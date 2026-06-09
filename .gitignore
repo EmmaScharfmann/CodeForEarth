@@ -216,3 +216,14 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Mac extensions
+.DS_Store
+
+# Pycharm stuff
+.idea/*
+
+# Model weights
+*.h5
+*.nc
+*.csv
