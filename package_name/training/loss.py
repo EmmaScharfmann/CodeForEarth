@@ -75,7 +75,7 @@ class VAELoss:
     def _calculate_target_prediction_loss(
         self, encoder_input: EncoderInput, auxiliary_output: AuxiliaryOutput
     ) -> Tensor:
-        """Calculate the target of the given inputs and outputs."""
+        """Calculate the component of the loss corresponding to the target prediction (as a KL divergence)"""
         r_true = tf.cast(encoder_input.r, tf.float32)
         r_pred = auxiliary_output.r
 
@@ -114,7 +114,7 @@ def _calculate_vae_regularisation_loss(
 def _calculate_mixture_regularisation(
     auxiliary_output: AuxiliaryOutput, mixture_output: MixtureComponents
 ) -> Tensor:
-    """"""
+    """Calculate the component of the loss which regularized the mixture distribution."""
     # Categorical KL: match cluster assignment by the encoder with the cluster probability of the mixture model
     mc = tf.reduce_mean(auxiliary_output.c, axis=0)
     mpi = tf.reduce_mean(mixture_output.pi, axis=0)
@@ -132,7 +132,7 @@ def _calculate_mixture_regularisation(
 def _calculate_cluster_target_regularisation_loss(
     auxiliary_output: AuxiliaryOutput,
 ) -> Tensor:
-    """Calculate the categorical cross-entropy for the given auxiliary output."""
+    """Calculate the component of the loss ensuring that the cluster prediction made directly from the input variable (c) and that made from the target variable (cr) are close to each other"""
     return _calculate_categorical_kl_divergence(auxiliary_output.c, auxiliary_output.cr)
 
 
