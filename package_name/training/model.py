@@ -39,7 +39,6 @@ class VAEModel(Model):
                 decoder_output=decoder_output
             ),
         )
-
         self.add_loss(tf.reduce_mean(losses.total))
         return {
             "encoder_output": {

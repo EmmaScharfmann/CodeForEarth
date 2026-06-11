@@ -1,5 +1,5 @@
 from tensorflow import Tensor
-from tensorflow.keras.losses import mse, categorical_crossentropy
+from tensorflow.keras.losses import mse
 import tensorflow as tf
 
 from package_name.training.utils import (
@@ -10,7 +10,10 @@ from package_name.training.utils import (
     LatentSpace,
     MixtureComponents,
     EncoderOutput,
+    GaussianDistribution,
 )
+
+_EPSILON = tf.keras.backend.epsilon()
 
 
 class VAELoss:
@@ -38,89 +41,116 @@ class VAELoss:
         :param decoder_output:    The model output data.
         :return:                  The loss function, separated into different logical parts.
         """
-
         return Loss(
-            reconstruction=self._calculate_reconstruction_loss(
+            vae_reconstruction=self._calculate_vae_reconstruction_loss(
                 encoder_input=encoder_input, decoder_output=decoder_output
             ),
-            prediction=_cluster_prediction(auxiliary_output=encoder_output.aux),
-            target=self._target(
-                encoder_input=encoder_input, auxiliary_output=encoder_output.aux
-            ),
-            kl_gaussian=_kl_gaussian(
-                latent_space_output=encoder_output.latent,
-                mixture_output=encoder_output.mixture,
-            ),
-            kl_categorical=_kl_categorical(
+            vae_regularisation=_calculate_vae_regularisation_loss(
                 mixture_output=encoder_output.mixture,
                 auxiliary_output=encoder_output.aux,
+                latent_space_output=encoder_output.latent,
             ),
-            dirichlet=_dirichlet(mixture_output=encoder_output.mixture),
+            target_prediction=self._calculate_target_prediction_loss(
+                encoder_input=encoder_input, auxiliary_output=encoder_output.aux
+            ),
+            cluster_target_regularisation=_calculate_cluster_target_regularisation_loss(
+                auxiliary_output=encoder_output.aux
+            ),
+            mixture_regularization=_calculate_mixture_regularisation(
+                auxiliary_output=encoder_output.aux,
+                mixture_output=encoder_output.mixture,
+            ),
         )
 
-    def _calculate_reconstruction_loss(
+    def _calculate_vae_reconstruction_loss(
         self, encoder_input: EncoderInput, decoder_output: DecoderOutput
     ) -> Tensor:
         """Calculate the reconstruction loss of the given inputs and outputs."""
         return (
             mse(encoder_input.x, decoder_output.x_recon)
-            * self.original_dim
+            * self.original_dim  # TODO: why * self.original_dim?
             * self.reconstruction_loss_factor
         )
 
-    def _target(
+    def _calculate_target_prediction_loss(
         self, encoder_input: EncoderInput, auxiliary_output: AuxiliaryOutput
     ) -> Tensor:
         """Calculate the target of the given inputs and outputs."""
         r_true = tf.cast(encoder_input.r, tf.float32)
         r_pred = auxiliary_output.r
 
-        return (
-            categorical_crossentropy(r_true, r_pred)
-            + categorical_crossentropy(r_true, r_true)
-        ) * self.pr_cluster_number
+        return _calculate_categorical_kl_divergence(
+            p=r_true, q=r_pred
+        ) * tf.constant(  # TODO: why * self.pr_cluster_number?
+            self.pr_cluster_number,
+            dtype=r_true.dtype,
+        )
 
 
-def _cluster_prediction(auxiliary_output: AuxiliaryOutput) -> Tensor:
-    """Calculate the categorical cross-entropy for the given auxiliary output."""
-    return categorical_crossentropy(auxiliary_output.c, auxiliary_output.cr)
-
-
-def _kl_categorical(
-    mixture_output: MixtureComponents, auxiliary_output: AuxiliaryOutput
+def _calculate_vae_regularisation_loss(
+    latent_space_output: LatentSpace,
+    mixture_output: MixtureComponents,
+    auxiliary_output: AuxiliaryOutput,
 ) -> Tensor:
-    """Calculate the KL loss for the categorical components."""
-    c = auxiliary_output.c
-    pi = mixture_output.pi
+    """Calculate VAE regularisation loss in order to align latent space with cluster's center"""
+    z_mean = tf.expand_dims(latent_space_output.z_mean, axis=1)
+    z_log_var = tf.expand_dims(latent_space_output.z_log_var, axis=1)
 
-    mc = tf.reduce_mean(c, axis=0)
-    mpi = tf.reduce_mean(pi, axis=0)
-
-    return tf.reduce_sum(mc * tf.math.log(mc) - mc * tf.math.log(mpi))
-
-
-def _dirichlet(mixture_output: MixtureComponents) -> Tensor:
-    """Calculate the dirichlet loss for the given mixture components and auxiliary output."""
-    pi = mixture_output.pi
-    dir_prior = -0.5 * tf.math.log(pi)
-    return tf.reduce_sum(dir_prior, axis=-1)
-
-
-def _kl_gaussian(
-    latent_space_output: LatentSpace, mixture_output: MixtureComponents
-) -> Tensor:
-    """Calculate the KL loss for the gaussian components."""
-    z_mean = latent_space_output.z_mean
-    z_log_var = latent_space_output.z_log_var
     mu = mixture_output.mu
-    c = mixture_output.pi
+    log_var_prior = tf.zeros_like(mu)
 
-    z_mean = tf.expand_dims(z_mean, 1)
-    z_log_var = tf.expand_dims(z_log_var, 1)
+    component_kl = _calculate_gaussian_kl_divergence(
+        p=GaussianDistribution(mean=z_mean, log_var=z_log_var),
+        q=GaussianDistribution(mean=mu, log_var=log_var_prior),
+    )
+    gaussian_kl = tf.reduce_sum(
+        component_kl * auxiliary_output.c,
+        axis=-1,
+    )
 
-    diff = z_mean - mu
+    return gaussian_kl
 
-    kl = 1 + z_log_var - tf.square(diff) - tf.exp(z_log_var)
-    kl = tf.reduce_sum(kl, axis=-1)
 
-    return -0.5 * tf.reduce_sum(kl * c, axis=-1)
+def _calculate_mixture_regularisation(
+    auxiliary_output: AuxiliaryOutput, mixture_output: MixtureComponents
+) -> Tensor:
+    """"""
+    # Categorical KL: match cluster assignment by the encoder with the cluster probability of the mixture model
+    mc = tf.reduce_mean(auxiliary_output.c, axis=0)
+    mpi = tf.reduce_mean(mixture_output.pi, axis=0)
+    categorical_KL_divergence = _calculate_categorical_kl_divergence(p=mc, q=mpi)
+
+    # Dirichlet prior term: regularized mixture weights to avoid vanishing clusters
+    dirichlet_loss = tf.reduce_sum(
+        -0.5 * tf.math.log(tf.maximum(mixture_output.pi, _EPSILON)),
+        axis=-1,
+    )
+
+    return categorical_KL_divergence + dirichlet_loss
+
+
+def _calculate_cluster_target_regularisation_loss(
+    auxiliary_output: AuxiliaryOutput,
+) -> Tensor:
+    """Calculate the categorical cross-entropy for the given auxiliary output."""
+    return _calculate_categorical_kl_divergence(auxiliary_output.c, auxiliary_output.cr)
+
+
+def _calculate_gaussian_kl_divergence(
+    p: GaussianDistribution, q: GaussianDistribution
+) -> Tensor:
+    """Calculate the KL divergence between the two given gaussian distributions."""
+    var_p = tf.exp(p.log_var)
+    var_q = tf.exp(q.log_var)
+    return 0.5 * tf.reduce_sum(
+        q.log_var - p.log_var + (var_p + tf.square(p.mean - q.mean)) / var_q - 1,
+        axis=-1,
+    )
+
+
+def _calculate_categorical_kl_divergence(p: Tensor, q: Tensor) -> Tensor:
+    """Calculate the KL divergence between the two given categorical distributions."""
+    log_p = tf.math.log(tf.maximum(p, _EPSILON))
+    log_q = tf.math.log(tf.maximum(q, _EPSILON))
+
+    return tf.reduce_sum(p * (log_p - log_q), axis=-1)

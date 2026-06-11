@@ -46,29 +46,29 @@ class DecoderConfig:
 
 @dataclass
 class EncoderInput:
-    x: keras.KerasTensor
-    dummy: keras.KerasTensor
-    r: keras.KerasTensor
+    x: keras.KerasTensor  # (batch, *input_shape)
+    dummy: keras.KerasTensor  # (batch, 1)
+    r: keras.KerasTensor  # (batch, *input_shape)
 
 
 @dataclass
 class LatentSpace:
-    z_mean: keras.KerasTensor
-    z_log_var: keras.KerasTensor
-    z: keras.KerasTensor
+    z_mean: keras.KerasTensor  # (batch, latent_dim)
+    z_log_var: keras.KerasTensor  # (batch, latent_dim)
+    z: keras.KerasTensor  # (batch, latent_dim)
 
 
 @dataclass
 class MixtureComponents:
-    mu: tf.Tensor
-    pi: tf.Tensor
+    mu: tf.Tensor  # (batch, cluster_number, latent_dim)
+    pi: tf.Tensor  # (batch, cluster_number)
 
 
 @dataclass
 class AuxiliaryOutput:
-    c: tf.Tensor
-    r: tf.Tensor
-    cr: tf.Tensor
+    c: tf.Tensor  # (batch, cluster_number)
+    r: tf.Tensor  # (batch, pr_cluster_number)
+    cr: tf.Tensor  # (batch, cluster_number)
 
 
 @dataclass
@@ -80,28 +80,32 @@ class EncoderOutput:
 
 @dataclass
 class DecoderOutput:
-    x_recon: keras.KerasTensor
+    x_recon: keras.KerasTensor  # (batch, *input_shape)
 
 
 @dataclass
 class Loss:
-    reconstruction: tf.Tensor
-    prediction: tf.Tensor
-    target: tf.Tensor
-    kl_gaussian: tf.Tensor
-    kl_categorical: tf.Tensor
-    dirichlet: tf.Tensor
+    vae_reconstruction: tf.Tensor  # (1,)
+    vae_regularisation: tf.Tensor  # (1,)
+    target_prediction: tf.Tensor  # (1,)
+    cluster_target_regularisation: tf.Tensor  # (1,)
+    mixture_regularization: tf.Tensor  # (1,)
 
     @property
     def total(self):
         return (
-            self.reconstruction
-            + self.prediction
-            + self.target
-            + self.kl_gaussian
-            + self.kl_categorical
-            + self.dirichlet
+            self.vae_reconstruction
+            + self.vae_regularisation
+            + self.target_prediction
+            + self.cluster_target_regularisation
+            + self.mixture_regularization
         )
+
+
+@dataclass
+class GaussianDistribution:
+    mean: tf.Tensor
+    log_var: tf.Tensor
 
 
 def format_encoder_output_as_object(encoder_output: dict) -> EncoderOutput:
