@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.keras.models import Model
@@ -15,19 +17,21 @@ class VAE:
         self,
         cfg: VAEConfig,
         reconstruction_loss_factor: float = 0.5,
-        path_for_weights_initialization: str | None = None,
+        dirichlet_loss_factor: float = 0.5,
+        path_to_save_weights: str | None = None,
     ) -> None:
         self.cfg = cfg
         self.custom_loss = VAELoss(
             reconstruction_loss_factor=reconstruction_loss_factor,
+            dirichlet_loss_factor=dirichlet_loss_factor,
             original_dim=cfg.original_dim,
             pr_cluster_number=cfg.pr_cluster_number,
         )
-        self.path_for_weights_initialization = path_for_weights_initialization
+        self.path_to_save_weights = path_to_save_weights
 
         encoder_config = EncoderConfig(
-            input_shape=(cfg.original_dim,),
-            input_shape_r=(cfg.original_dim_r,),
+            original_dim=cfg.original_dim,
+            original_dim_target=cfg.original_dim_target,
             dim_layer1=cfg.dim_layer1,
             dim_layer2=cfg.dim_layer2,
             dim_layer3=cfg.dim_layer3,
@@ -45,7 +49,7 @@ class VAE:
             dim_layer3=cfg.dim_layer3,
             activation=cfg.activation,
             latent_dim=cfg.latent_dim,
-            output_dim=cfg.original_dim,
+            original_dim=cfg.original_dim,
         )
         self._decoder = DecoderBuilder(decoder_config).build()
 
@@ -55,14 +59,8 @@ class VAE:
             custom_loss=self.custom_loss,
             name="vae",
         )
-        if self.path_for_weights_initialization is not None:
-            self._initialize_weights(model=self._model)
-            self._model.save_weights(
-                self.path_for_weights_initialization
-                + "random_weights_"
-                + str(cfg.cluster_number)
-                + ".weights.h5"
-            )
+        if self.path_to_save_weights is not None:
+            self._initialize_and_save_weights(model=self._model)
 
     def initialize_weights_from(self, path: str) -> None:
         """
@@ -117,14 +115,20 @@ class VAE:
         """
         self._model.save_weights(path)
 
-    def _initialize_weights(self, model: Model) -> None:
-        """Initialize the weights of the model."""
+    def _initialize_and_save_weights(self, model: Model) -> None:
+        """Build the model with a dummy forward pass and save the initial weights."""
         x_dummy = {
             "x": tf.zeros((1, self.cfg.original_dim)),
             "dummy": tf.zeros((1, 1)),
-            "r": tf.zeros((1, self.cfg.pr_cluster_number)),
+            "target": tf.zeros((1, self.cfg.pr_cluster_number)),
         }
-        _ = model(x_dummy)
+        model(x_dummy)
+        model.save_weights(
+            os.path.join(
+                self.path_to_save_weights,
+                f"random_weights_{str(self.cfg.cluster_number)}.weights.h5",
+            )
+        )
 
     def encode(self, X: np.ndarray) -> np.ndarray:
         """

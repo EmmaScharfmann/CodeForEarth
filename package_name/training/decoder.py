@@ -35,5 +35,5 @@ class DecoderBuilder:
         )
         x = Dense(cfg.dim_layer2, activation=cfg.activation, name="dec_dense_2")(x)
         x = Dense(cfg.dim_layer1, activation=cfg.activation, name="dec_dense_3")(x)
-        x = Dense(self.cfg.output_dim, name="x_recon")(x)
+        x = Dense(self.cfg.original_dim, name="x_recon")(x)
         return x

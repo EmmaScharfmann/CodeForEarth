@@ -15,12 +15,11 @@ class VAEModel(Model):
         self.custom_loss = custom_loss
 
     @override
-    def call(self, encoder_input: dict, training: bool = False, **kwargs):
+    def call(self, encoder_input: dict, **kwargs):
         """
         Get the encoder output and decoder output from the encoder input.
 
         :param encoder_input:   The encoder input.
-        :param training:        Whether the model is in training mode.
         :param kwargs:          Other arguments, to match the parent function `call`.
         :return:                A dictionary with the encoder output and decoder output.
         """
@@ -48,7 +47,7 @@ class VAEModel(Model):
                     "z_log_var": encoder_output["latent"]["z_log_var"],
                 },
                 "mixture": encoder_output["mixture"],
-                "aux": encoder_output["aux"],
+                "clusters": encoder_output["clusters"],
             },
             "decoder_output": {"x_recon": decoder_output["x_recon"]},
         }

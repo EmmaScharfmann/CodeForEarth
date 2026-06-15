@@ -19,11 +19,11 @@ class EncoderBuilder:
 
         x_reduced = self._reduce_vector_size(vector_input=inputs["x"])
         latent = self._build_latent_space(x_reduced=x_reduced)
-        aux = self._build_aux_outputs(aux_input=x_reduced)
+        clusters = self._build_cluster_outputs(clusters_input=x_reduced)
 
         mixture = self._build_mixture_components(dummy_input=inputs["dummy"])
 
-        outputs = {"latent": latent, "mixture": mixture, "aux": aux}
+        outputs = {"latent": latent, "mixture": mixture, "clusters": clusters}
 
         return Model(
             inputs=inputs,
@@ -34,14 +34,14 @@ class EncoderBuilder:
     def _format_inputs(self) -> dict[str, keras.KerasTensor]:
         """Format input as specified in the given config."""
         cfg = self.cfg
-        x = Input(shape=cfg.input_shape, name="x")
+        x = Input(shape=(cfg.original_dim,), name="x")
         dummy = Input(shape=(1,), name="dummy")
-        r = Input(shape=cfg.input_shape_r, name="r")
+        target = Input(shape=(cfg.original_dim_target,), name="target")
 
         return {
             "x": x,
             "dummy": dummy,
-            "r": r,
+            "target": target,
         }
 
     def _reduce_vector_size(self, vector_input: keras.KerasTensor) -> keras.KerasTensor:
@@ -85,16 +85,23 @@ class EncoderBuilder:
 
         return {"mu": mu, "pi": pi}
 
-    def _build_aux_outputs(
-        self, aux_input: keras.KerasTensor
+    def _build_cluster_outputs(
+        self, clusters_input: keras.KerasTensor
     ) -> dict[str, keras.KerasTensor]:
-        """Build the auxiliary classification outputs for cluster and pseudo-label predictions."""
+        """Build the cluster outputs, either directly from the input variable (cluster_pred) or from the target variable (target_cluster_pred)."""
         cfg = self.cfg
 
-        c = Dense(cfg.cluster_number, activation="softmax", name="c")(aux_input)
-        r = Dense(cfg.pr_cluster_number, activation="softmax", name="r_label")(
-            aux_input
-        )
-        cr = Dense(cfg.cluster_number, activation="softmax", name="cr")(r)
+        c = Dense(cfg.cluster_number, activation="softmax", name="c")(clusters_input)
+        target_pred = Dense(
+            cfg.pr_cluster_number, activation="softmax", name="target_pred"
+        )(clusters_input)
 
-        return {"c": c, "r": r, "cr": cr}
+        clusters_pred_from_target = Dense(
+            cfg.cluster_number, activation="softmax", name="cr"
+        )(target_pred)
+
+        return {
+            "clusters_pred": c,
+            "target_pred": target_pred,
+            "target_clusters_pred": clusters_pred_from_target,
+        }

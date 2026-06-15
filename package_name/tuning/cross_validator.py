@@ -1,9 +1,11 @@
+import os
 import numpy as np
 import tensorflow as tf
 
 from package_name.training.vae import VAE
 
 
+# TODO: implement a proper cross validation which returns some evaluation metrics for each run, as well as a corresponding interval of confidence.
 class CrossValidator:
     def __init__(self, vae: VAE, filepath: str, cluster_number: int, n_runs: int = 20):
         self.vae = vae
@@ -54,8 +56,12 @@ class CrossValidator:
 
     def _construct_initial_weights_path(self) -> str:
         """Construct the path where the initial weights are stored."""
-        return f"{self.filepath}random_weights_{self.cluster_number}.weights.h5"
+        return os.path.join(
+            self.filepath, f"random_weights_{self.cluster_number}.weights.h5"
+        )
 
     def _construct_final_weights_path(self, run_id: int) -> str:
         """Construct the path where the final weights are stored for the given run ID."""
-        return f"{self.filepath}final_weights_{self.cluster_number}_{run_id}.weights.h5"
+        return os.path.join(
+            self.filepath, f"final_weights_{self.cluster_number}_{run_id}.weights.h5"
+        )

@@ -58,5 +58,5 @@ def _build_inputs(
     return {
         "x": X,
         "dummy": dummy,
-        "r": y,
+        "target": y,
     }

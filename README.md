@@ -35,7 +35,7 @@ Run:
 - code repetition should be avoided (as much as possible)
 - functions and variable names use snake_case 
 - function names should start with a verb (handle_formatting, build_model, get_data)
-- when an empty object (list, set, dict,...) is initialized, it is good practice to specify its type (example: `new_list: list[int]: []`)
+- when an empty object (list, set, dict,...) is initialized, it is good practice to specify its type (example: `new_list: list[int] = []`)
 - function and variable names should be as clear as possible
 - input and output type hints should be as precise as possible. Using custom classes is good practice to have precise types.
 #### 3. Formatting 
