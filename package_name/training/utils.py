@@ -122,7 +122,7 @@ def format_encoder_output_as_object(encoder_output: dict) -> EncoderOutput:
     clusters_output = ClustersOutput(
         clusters_pred=encoder_output["clusters"]["clusters_pred"],
         target_pred=encoder_output["clusters"]["target_pred"],
-        target_clusters_pred=encoder_output["clusters"]["targe_clusters_pred"],
+        target_clusters_pred=encoder_output["clusters"]["target_clusters_pred"],
     )
 
     encoder_output = EncoderOutput(
