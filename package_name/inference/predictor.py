@@ -4,4 +4,3 @@ class Model:
 
     def predict(self, inputs: list) -> list:
         raise NotImplementedError()
-

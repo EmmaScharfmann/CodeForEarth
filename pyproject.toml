@@ -7,7 +7,7 @@ name = "package_name"
 version = "0.1.0"
 description = "A pip package for the code for earth projet."
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.13"
 license = { text = "MIT" }
 authors = [
     { name = "Emma Scharfmann", email = "scharfmann.emma@gmail.com" },
@@ -36,4 +36,17 @@ include = ["package_name*"]
 
 [tool.ruff]
 line-length = 88
+
+[tool.black]
+line-length = 88
+target-version = ["py313"]
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+    \.git
+  | \.venv
+  | build
+  | dist
+)/
+'''
 
