@@ -8,11 +8,11 @@ from package_name.data_processing import data_processor
 from package_name.training.decoder import DecoderBuilder
 from package_name.training.encoder import EncoderBuilder
 from package_name.training.loss import VAELoss
-from package_name.training.model import VAEModel
+from package_name.training.vae_model import VAEModel
 from package_name.training.utils import VAEConfig, EncoderConfig, DecoderConfig
 
 
-class VAE:
+class VAETrainer:
     def __init__(
         self,
         cfg: VAEConfig,
@@ -117,12 +117,10 @@ class VAE:
 
     def _initialize_and_save_weights(self, model: Model) -> None:
         """Build the model with a dummy forward pass and save the initial weights."""
-        x_dummy = {
-            "x": tf.zeros((1, self.cfg.original_dim)),
-            "dummy": tf.zeros((1, 1)),
-            "target": tf.zeros((1, self.cfg.pr_cluster_number)),
-        }
-        model(x_dummy)
+        if self.path_to_save_weights is None:
+            return
+
+        self._build()
         model.save_weights(
             os.path.join(
                 self.path_to_save_weights,
@@ -130,20 +128,11 @@ class VAE:
             )
         )
 
-    def encode(self, X: np.ndarray) -> np.ndarray:
-        """
-        Encode the given input `X`.
-
-        :param X:   The input `X` to be encoded.
-        :return:    The encoded `X`.
-        """
-        return self._encoder.predict(X)
-
-    def decode(self, Z: np.ndarray) -> np.ndarray:
-        """
-        Decode the given output `Z`.
-
-        :param Z:   The output of the encoder.
-        :returns:   The decoded output.
-        """
-        return self._decoder.predict(Z)
+    def _build(self) -> None:
+        """Trigger a forward pass to initialize weight shapes."""
+        dummy_input = {
+            "x": tf.zeros((1, self.cfg.original_dim)),
+            "dummy": tf.zeros((1, 1)),
+            "target": tf.zeros((1, self.cfg.pr_cluster_number)),
+        }
+        self._model(dummy_input)

@@ -1,6 +1,93 @@
-class Model:
-    def __init__(self, model):
-        self.model = model
+import numpy as np
+import tensorflow as tf
 
-    def predict(self, inputs: list) -> list:
-        raise NotImplementedError()
+from package_name.training.decoder import DecoderBuilder
+from package_name.training.encoder import EncoderBuilder
+from package_name.training.loss import VAELoss
+from package_name.training.vae_model import VAEModel
+from package_name.training.utils import VAEConfig, EncoderConfig, DecoderConfig
+
+
+class VAEPredictor:
+    def __init__(
+        self,
+        cfg: VAEConfig,
+        reconstruction_loss_factor: float = 0.5,
+        dirichlet_loss_factor: float = 0.5,
+    ) -> None:
+        self.cfg = cfg
+        self.custom_loss = VAELoss(
+            reconstruction_loss_factor=reconstruction_loss_factor,
+            dirichlet_loss_factor=dirichlet_loss_factor,
+            original_dim=cfg.original_dim,
+            pr_cluster_number=cfg.pr_cluster_number,
+        )
+
+        encoder_config = EncoderConfig(
+            original_dim=cfg.original_dim,
+            original_dim_target=cfg.original_dim_target,
+            dim_layer1=cfg.dim_layer1,
+            dim_layer2=cfg.dim_layer2,
+            dim_layer3=cfg.dim_layer3,
+            activation=cfg.activation,
+            cluster_number=cfg.cluster_number,
+            latent_dim=cfg.latent_dim,
+            pr_cluster_number=cfg.pr_cluster_number,
+            sampling_fn=cfg.sampling_fn,
+        )
+        self._encoder = EncoderBuilder(encoder_config).build()
+
+        decoder_config = DecoderConfig(
+            dim_layer1=cfg.dim_layer1,
+            dim_layer2=cfg.dim_layer2,
+            dim_layer3=cfg.dim_layer3,
+            activation=cfg.activation,
+            latent_dim=cfg.latent_dim,
+            original_dim=cfg.original_dim,
+        )
+        self._decoder = DecoderBuilder(decoder_config).build()
+
+        self._model = VAEModel(
+            encoder=self._encoder,
+            decoder=self._decoder,
+            custom_loss=self.custom_loss,
+            name="vae",
+        )
+
+
+    def encode(self, X: np.ndarray, batch_size: int) -> np.ndarray:
+        """
+        Encode the given input `X`.
+
+        :param X:           The input `X` to be encoded.
+        :param batch_size:  The number of samples per batch of computation
+        :return:            The encoded `X`.
+        """
+        return self._encoder.predict(X, batch_size=batch_size)
+
+    def decode(self, Z: np.ndarray) -> np.ndarray:
+        """
+        Decode the given output `Z`.
+
+        :param Z:   The output of the encoder.
+        :returns:   The decoded output.
+        """
+        return self._decoder.predict(Z)
+
+    def _build(self) -> None:
+        """Trigger a forward pass to initialize weight shapes."""
+        dummy_input = {
+            "x": tf.zeros((1, self.cfg.original_dim)),
+            "dummy": tf.zeros((1, 1)),
+            "target": tf.zeros((1, self.cfg.pr_cluster_number)),
+        }
+        self._model(dummy_input)
+
+    def load_weights(self, path: str) -> None:
+        """
+        Load the model weights from the given path.
+
+        :param path:    The path the model weights are stored at.
+        """
+        self._build()
+        self._model.load_weights(path)
