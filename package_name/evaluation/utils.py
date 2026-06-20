@@ -8,12 +8,14 @@ def _get_labels_from_encoder_output(encoder_output: dict):
     """
     Gets the label of the most likely cluster from the output of the CMM-VAE encoder.
     """
-    cluster_probs = encoder_output['clusters']['clusters_pred']
+    cluster_probs = encoder_output["clusters"]["clusters_pred"]
     return np.argmax(cluster_probs, axis=1)
-    
-def get_input_labels(vae: VAE,
-                      inputs: np.ndarray,
-                 ) -> np.ndarray:
+
+
+def get_input_labels(
+    vae: VAE,
+    inputs: np.ndarray,
+) -> np.ndarray:
     """Get the labels for a set of input data (e.g., Z500) using the most probable cluster predicted by a CMM-VAE.
 
     :param inputs: Input data to be labeled
@@ -31,6 +33,7 @@ def get_input_labels(vae: VAE,
 
     return labels
 
+
 def calculate_cluster_centers(vae: VAE) -> np.ndarray:
     """
     Get cluster centers in input space by decoding the means of the mixture components in latent space.
@@ -44,5 +47,5 @@ def calculate_cluster_centers(vae: VAE) -> np.ndarray:
         "target": np.zeros((1, vae.cfg.pr_cluster_number)),
     }
     encoded = vae.encode(dummy_input)
-    mu = encoded['mixture']['mu'][0]
-    return vae.decode(mu)['x_recon']
+    mu = encoded["mixture"]["mu"][0]
+    return vae.decode(mu)["x_recon"]

@@ -52,6 +52,7 @@ def flatten_input(X: np.ndarray) -> np.ndarray:
     nt, ny, nx = X.shape
     return np.reshape(X, (nt, ny * nx))
 
+
 def unflatten_input(X: np.ndarray, ny: int, nx: int) -> np.ndarray:
     """Reshape a 2-dimensional input array into a 3-dimensional array.
 
