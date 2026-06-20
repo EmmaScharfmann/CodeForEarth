@@ -2,9 +2,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from numpy import ndarray
-import cartopy.crs as ccrs
-import cartopy.feature as cfeature
-
 
 def filter_dataset(
     dataset: xr.Dataset, latitude: tuple[int, int], longitude: tuple[int, int]
@@ -137,42 +134,3 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     ax.set(xlabel="Epoch", ylabel="Loss")
     plt.legend()
     plt.show()
-
-def plot_cluster_centers(cluster_centers: xr.DataArray, 
-                         labels_data: np.ndarray,
-                         label_reordering: np.ndarray | None = None,
-                         borders: bool = True, 
-                         projection: ccrs.Projection = ccrs.Orthographic(0,45),
-                         **kwargs):
-    """
-    Plot cluster centers on a map.
-
-    :param cluster_centers:  The cluster centers to plot. Must have dimensions 'label', 'latitude', and 'longitude'.
-    :param labels_data: Cluster labels for each time step, used to calculate the frequency of each cluster.
-    :param label_reordering: A list of indices to reorder the clusters. the first cluster to be plotted will be label_reordering[0], the second cluster will be label_reordering[1], and so on. If None, clusters will be plotted in their original order.
-    :param borders:          If True, add country borders to the map.
-    :param projection:       The cartopy projection to use for the map.
-    :param kwargs:          Other arguments, passed to the contourf function for plotting.
-    """
-
-    cluster_number = cluster_centers.values.shape[0]
-    
-    fig , axs = plt.subplots(1,cluster_number, figsize=(4*cluster_number, 4), subplot_kw=dict(projection=projection))
-
-    cluster_counts = [labels_data[labels_data==i].shape[0] for i in range(cluster_number)]
-    cluster_frequencies = np.array(cluster_counts) / len(labels_data)
-
-    if label_reordering is None:
-        label_reordering = np.arange(cluster_number)
-
-    for i,ax in enumerate(axs):
-        cluster_centers[label_reordering[i]].plot.contourf(ax=ax, transform=ccrs.PlateCarree(), **kwargs)
-        ax.coastlines()
-
-        if borders==True:
-            ax.add_feature(cfeature.BORDERS)
-            
-        title = f"Cluster {label_reordering[i]}, {cluster_frequencies[i]*100:.1f}%"
-        ax.set_title(title)
-    fig.tight_layout()
-    
