@@ -54,25 +54,21 @@ class VAEPredictor:
             name="vae",
         )
 
-
-    def encode(self, X: np.ndarray, batch_size: int) -> np.ndarray:
+    # TODO: change the encoder structure to only have to pass X instead of having to pass dummies "dummy" and "target" alongside.
+    def encode(self, input: dict[str,np.ndarray], batch_size: int) -> np.ndarray:
         """
         Encode the given input `X`.
 
-        :param X:           The input `X` to be encoded.
+        :param input:       The encoder input with the following format:
+                            {"x": X,
+                             "dummy": np.ones((X.shape[0], 1)),
+                             "target": np.zeros((X.shape[0], vae.cfg.pr_cluster_number)),
+                            }
+                            where X is the matrix to encode.
         :param batch_size:  The number of samples per batch of computation
         :return:            The encoded `X`.
         """
-        return self._encoder.predict(X, batch_size=batch_size)
-
-    def decode(self, Z: np.ndarray) -> np.ndarray:
-        """
-        Decode the given output `Z`.
-
-        :param Z:   The output of the encoder.
-        :returns:   The decoded output.
-        """
-        return self._decoder.predict(Z)
+        return self._encoder.predict(x=input, batch_size=batch_size)
 
     def _build(self) -> None:
         """Trigger a forward pass to initialize weight shapes."""

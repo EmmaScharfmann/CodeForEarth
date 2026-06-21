@@ -151,11 +151,11 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
 
 
 def plot_cluster_centers(cluster_centers: xr.DataArray,
-                         labels_data: np.ndarray,
-                         label_reordering: np.ndarray | None = None,
-                         borders: bool = True,
-                         projection: ccrs.Projection = ccrs.Orthographic(0, 45),
-                         **kwargs):
+    labels_data: np.ndarray,
+    label_reordering: np.ndarray | None = None,
+    borders: bool = True,
+    projection: ccrs.Projection = ccrs.Orthographic(0, 45),
+    **kwargs):
     """
     Plot cluster centers on a map.
 
@@ -166,7 +166,6 @@ def plot_cluster_centers(cluster_centers: xr.DataArray,
     :param projection:          The cartopy projection to use for the map.
     :param kwargs:              Other arguments, passed to the contourf function for plotting.
     """
-
     cluster_number = cluster_centers.values.shape[0]
 
     fig, axs = plt.subplots(1, cluster_number, figsize=(4 * cluster_number, 4), subplot_kw=dict(projection=projection))
