@@ -5,11 +5,11 @@ import tensorflow as tf
 from tensorflow.keras.models import Model
 
 from package_name.data_processing import data_processor
-from package_name.training.decoder import DecoderBuilder
-from package_name.training.encoder import EncoderBuilder
-from package_name.training.loss import VAELoss
-from package_name.training.vae_model import VAEModel
-from package_name.training.utils import VAEConfig, EncoderConfig, DecoderConfig
+from package_name.model.decoder import DecoderBuilder
+from package_name.model.encoder import EncoderBuilder
+from package_name.model.loss import VAELoss
+from package_name.model.vae_model import VAEModel
+from package_name.model.utils import VAEConfig, EncoderConfig, DecoderConfig
 
 
 class VAETrainer:

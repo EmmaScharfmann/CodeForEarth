@@ -1,11 +1,11 @@
 import numpy as np
 import tensorflow as tf
 
-from package_name.training.decoder import DecoderBuilder
-from package_name.training.encoder import EncoderBuilder
-from package_name.training.loss import VAELoss
-from package_name.training.vae_model import VAEModel
-from package_name.training.utils import VAEConfig, EncoderConfig, DecoderConfig
+from package_name.model.decoder import DecoderBuilder
+from package_name.model.encoder import EncoderBuilder
+from package_name.model.loss import VAELoss
+from package_name.model.vae_model import VAEModel
+from package_name.model.utils import VAEConfig, EncoderConfig, DecoderConfig
 
 
 class VAEPredictor:

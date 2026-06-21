@@ -2,7 +2,7 @@ import keras
 from tensorflow.keras.layers import Input, Dense, Reshape, Lambda
 from tensorflow.keras.models import Model
 
-from package_name.training.utils import EncoderConfig
+from package_name.model.utils import EncoderConfig
 
 
 class EncoderBuilder:

@@ -3,8 +3,8 @@ from typing import override
 from tensorflow.keras.models import Model
 import tensorflow as tf
 
-from package_name.training import utils
-from package_name.training.loss import VAELoss
+from package_name.model import utils
+from package_name.model.loss import VAELoss
 
 
 class VAEModel(Model):

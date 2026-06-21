@@ -2,7 +2,7 @@ from tensorflow import Tensor
 from tensorflow.keras.losses import mse
 import tensorflow as tf
 
-from package_name.training.utils import (
+from package_name.model.utils import (
     Loss,
     EncoderInput,
     DecoderOutput,
