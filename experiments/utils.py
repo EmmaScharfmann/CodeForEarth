@@ -101,9 +101,7 @@ def preprocess_dataset(
     else:
         raise ValueError(f"Unknown geographical filter: {geographical_filter}")
 
-    if geographical_filter != '':
-        dataset = filter_dataset(dataset=dataset, latitude=latitude, longitude=longitude)
-
+    dataset = filter_dataset(dataset=dataset, latitude=latitude, longitude=longitude)
     dataset = dataset.sel(time=np.isin(dataset.time.dt.month, months_filter))
 
     if anomalies:
