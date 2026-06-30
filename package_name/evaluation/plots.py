@@ -7,7 +7,7 @@ from matplotlib.gridspec import GridSpec
 from matplotlib.contour import ContourSet
 
 from package_name.training.vae import VAE
-from package_name.evaluation.utils import calculate_cluster_centers, get_input_labels
+from package_name.evaluation.utils import calculate_cluster_centers, predict_clusters
 from package_name.data_processing.data_processor import unflatten_input
 
 
@@ -43,14 +43,14 @@ def plot_set_of_maps(
     """
     Plot a list of maps
 
-    :param data: The data to be plotted. Must have dimensions dim0, 'latitude', and 
-                 'longitude'. (dim0 can have any name, but it has to be the first 
+    :param data: The data to be plotted. Must have dimensions dim0, 'latitude', and
+                 'longitude'. (dim0 can have any name, but it has to be the first
                  dimension of the data array)
     :param titles: A list of titles for each subplot.
     :param suptitle: General plot title
-    :param plot_reordering: A list of indices to reorder the plots. The first data 
-                            instance to be plotted will be data[plot_reordering[0]], the 
-                            second cluster will be data[plot_reordering[1]], and so on. 
+    :param plot_reordering: A list of indices to reorder the plots. The first data
+                            instance to be plotted will be data[plot_reordering[0]], the
+                            second cluster will be data[plot_reordering[1]], and so on.
                             If None, data will be plotted in its original order.
     :param borders: If True, add country borders to the map.
     :param projection: The cartopy projection to use for the map.
@@ -126,9 +126,9 @@ def plot_empirical_cluster_centers(
     """
     Plot cluster centers on a set of maps.
 
-    :param input_with_labels: The input data (e.g., z500) for all time steps. Must have 
-                              dimensions "time", "latitude", and "longitude". The time 
-                              dimension must have a coordinate named "label" that contains 
+    :param input_with_labels: The input data (e.g., z500) for all time steps. Must have
+                              dimensions "time", "latitude", and "longitude". The time
+                              dimension must have a coordinate named "label" that contains
                               the cluster labels for each time step.
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
     :param kwargs:          Other arguments, passed to the contourf function for plotting.
@@ -163,14 +163,14 @@ def plot_spatial_odds_ratio(
     **kwargs,
 ):
     """
-    Plot, for each cluster and at each grid point, the mean of a binary target within the 
-    cluster divided by the mean of that target over all times. This corresponds to the 
+    Plot, for each cluster and at each grid point, the mean of a binary target within the
+    cluster divided by the mean of that target over all times. This corresponds to the
     odds ratio of the target within each cluster.
 
-    :param target_binary_with_labels: The target data (e.g., exceedance of a precipitation 
-                                      threshold) for all time steps. Must have dimensions 
-                                      "time", "latitude", and "longitude". The time dimension 
-                                      must have a coordinate named "label" that contains the 
+    :param target_binary_with_labels: The target data (e.g., exceedance of a precipitation
+                                      threshold) for all time steps. Must have dimensions
+                                      "time", "latitude", and "longitude". The time dimension
+                                      must have a coordinate named "label" that contains the
                                       cluster labels for each time step.
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
     :param vmax: used to set the contour levels, which will be [1/vmax, 1/(vmax-1), ... . vmax-1, vmax)]
@@ -201,26 +201,30 @@ def plot_reordered_centers_and_odds_ratio(
     vae: VAE, inputs: xr.DataArray, target_binary: xr.DataArray
 ):
     """
-    Plot a summary of the CMM-VAE clusters characteristics: centers (both empirical and 
+    Plot a summary of the CMM-VAE clusters characteristics: centers (both empirical and
     decoded) and odds ratio of a binary target.
     The clusters are ordered, for plotting, by the mean of the target within each cluster.
 
     :param vae: The CMM-VAE used to calculate cluster centers
-    :param inputs: The input data (e.g., z500) for all time steps. Must have dimensions 
+    :param inputs: The input data (e.g., z500) for all time steps. Must have dimensions
                    "time", "latitude", and "longitude".
-    :param target_binary: The target data (e.g., exceedance of a precipitation threshold) 
+    :param target_binary: The target data (e.g., exceedance of a precipitation threshold)
                           for all time steps. Must have the same shape and dimensions as "inputs".
     """
 
-    labels = get_input_labels(vae, inputs.values)
-    inputs_with_label = inputs.assign_coords(label=("time", labels))
-    target_binary_with_label = target_binary.assign_coords(label=("time", labels))
+    cluster_labels = predict_clusters(vae, inputs.values)
+    inputs_with_label = inputs.assign_coords(cluster=("time", cluster_labels))
+    target_binary_with_label = target_binary.assign_coords(
+        cluster=("time", cluster_labels)
+    )
 
     # Reorder clusters by mean target for plotting
-    mean_target_by_label = (
-        target_binary_with_label.mean(("latitude", "longitude")).groupby("label").mean()
+    target_global_mean_by_cluster = (
+        target_binary_with_label.mean(("latitude", "longitude"))
+        .groupby("cluster")
+        .mean()
     )
-    label_reordering = mean_target_by_label.argsort().values
+    label_reordering = target_global_mean_by_cluster.argsort().values
 
     plot_cluster_centers(
         vae,

@@ -3,6 +3,7 @@ import numpy as np
 import xarray as xr
 from numpy import ndarray
 
+
 def filter_dataset(
     dataset: xr.Dataset, latitude: tuple[int, int], longitude: tuple[int, int]
 ) -> xr.Dataset:
@@ -86,7 +87,9 @@ def preprocess_dataset(
     else:
         raise ValueError("Geographical filter not recognized")
     if geographical_filter != "global":
-        dataset = filter_dataset(dataset=dataset, latitude=latitude, longitude=longitude)
+        dataset = filter_dataset(
+            dataset=dataset, latitude=latitude, longitude=longitude
+        )
 
     dataset = dataset.sel(time=np.isin(dataset.time.dt.month, months_filter))
 
