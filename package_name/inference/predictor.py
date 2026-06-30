@@ -42,7 +42,7 @@ class VAEPredictor:
 
     def decode(self, z: np.ndarray, batch_size: int) -> np.ndarray:
         """
-        Encode the given input `z`.
+        Decode the given input `z`.
 
         :param z:           The decoder input (corresponding to `z` in the LatentSpaceOutput) with the following format: (self.cfg.latent_dim,)
         :param batch_size:  The number of samples per batch of computation
