@@ -8,8 +8,10 @@ git clone https://github.com/EmmaScharfmann/CodeForEarth.git
 
 
 - Importing the package:
+```
 cd CodeForEarth
 pip install -e .
+```
 
 
 - Installing the necessary packages:

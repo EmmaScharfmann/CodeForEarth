@@ -1,20 +1,33 @@
+import cartopy.crs as ccrs
 import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from numpy import ndarray
+import cartopy.feature as cfeature
+
 
 
 def filter_dataset(
-    dataset: xr.Dataset, latitude: tuple[int, int], longitude: tuple[int, int]
+    dataset: xr.Dataset, latitude: tuple[int, int] | None  , longitude: tuple[int, int] | None
 ) -> xr.Dataset:
     """
     Filter a dataset by latitude and longitude.
 
     :param dataset:    The dataset to be filtered.
-    :param latitude:   The latitude of the dataset to be filtered.
-    :param longitude:  The longitude of the dataset to be filtered.
+    :param latitude:   The latitude of the dataset to be filtered. None if the dataset is not filtered on the latitude.
+    :param longitude:  The longitude of the dataset to be filtered. None if the dataset is not filtered on the longitude.
     :return:           The filtered dataset.
     """
+    if latitude is None and longitude is None:
+        return dataset
+    elif latitude is None:
+        return dataset.sel(
+            longitude=slice(longitude[0], longitude[1]),
+        )
+    elif longitude is None:
+        return dataset.sel(
+            latitude=slice(latitude[0], latitude[1]),
+        )
     return dataset.sel(
         latitude=slice(latitude[0], latitude[1]),
         longitude=slice(longitude[0], longitude[1]),
@@ -82,11 +95,13 @@ def preprocess_dataset(
     elif geographical_filter == "new atlantic":
         latitude = (20, 80)
         longitude = (-50, 30)
-
+    elif geographical_filter == 'global':
+        latitude = None
+        longitude = None
     else:
-        raise ValueError("Geographical filter not recognized, no filter applied")
-    dataset = filter_dataset(dataset=dataset, latitude=latitude, longitude=longitude)
+        raise ValueError(f"Unknown geographical filter: {geographical_filter}")
 
+    dataset = filter_dataset(dataset=dataset, latitude=latitude, longitude=longitude)
     dataset = dataset.sel(time=np.isin(dataset.time.dt.month, months_filter))
 
     if anomalies:
@@ -133,3 +148,41 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     ax.set(xlabel="Epoch", ylabel="Loss")
     plt.legend()
     plt.show()
+
+
+def plot_cluster_centers(cluster_centers: xr.DataArray,
+    labels_data: np.ndarray,
+    label_reordering: np.ndarray | None = None,
+    borders: bool = True,
+    projection: ccrs.Projection = ccrs.Orthographic(0, 45),
+    **kwargs):
+    """
+    Plot cluster centers on a map.
+
+    :param cluster_centers:     The cluster centers to plot. Must have dimensions 'label', 'latitude', and 'longitude'.
+    :param labels_data:         Cluster labels for each time step, used to calculate the frequency of each cluster.
+    :param label_reordering:    A list of indices to reorder the clusters. the first cluster to be plotted will be label_reordering[0], the second cluster will be label_reordering[1], and so on. If None, clusters will be plotted in their original order.
+    :param borders:             If True, add country borders to the map.
+    :param projection:          The cartopy projection to use for the map.
+    :param kwargs:              Other arguments, passed to the contourf function for plotting.
+    """
+    cluster_number = cluster_centers.values.shape[0]
+
+    fig, axs = plt.subplots(1, cluster_number, figsize=(4 * cluster_number, 4), subplot_kw=dict(projection=projection))
+
+    cluster_counts = [labels_data[labels_data == i].shape[0] for i in range(cluster_number)]
+    cluster_frequencies = np.array(cluster_counts) / len(labels_data)
+
+    if label_reordering is None:
+        label_reordering = np.arange(cluster_number)
+
+    for i, ax in enumerate(axs):
+        cluster_centers[label_reordering[i]].plot.contourf(ax=ax, transform=ccrs.PlateCarree(), **kwargs)
+        ax.coastlines()
+
+        if borders:
+            ax.add_feature(cfeature.BORDERS)
+
+        title = f"Cluster {label_reordering[i]}, {cluster_frequencies[i] * 100:.1f}%"
+        ax.set_title(title)
+    fig.tight_layout()
