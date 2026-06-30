@@ -6,12 +6,12 @@ import cartopy.feature as cfeature
 from matplotlib.gridspec import GridSpec
 from matplotlib.contour import ContourSet
 
-from package_name.training.vae import VAE
+from package_name.inference.predictor import VAEPredictor
 from package_name.evaluation.utils import calculate_cluster_centers, predict_clusters
 from package_name.data_processing.data_processor import unflatten_input
 
 
-def plot_single_map(
+def _plot_single_map(
     ax: plt.Axes, data: xr.DataArray, title: str, borders: bool = True, **kwargs
 ) -> ContourSet:
     """
@@ -31,7 +31,7 @@ def plot_single_map(
     return cf
 
 
-def plot_set_of_maps(
+def _plot_set_of_maps(
     data: xr.DataArray,
     titles: list[str],
     suptitle=str,
@@ -68,7 +68,7 @@ def plot_set_of_maps(
         plot_reordering = np.arange(plot_number)
 
     for i, ax in enumerate(axs):
-        cf = plot_single_map(
+        cf = _plot_single_map(
             ax=ax,
             data=data[plot_reordering[i]],
             title=titles[plot_reordering[i]],
@@ -81,16 +81,18 @@ def plot_set_of_maps(
 
     fig.suptitle(suptitle, fontsize=16)
     fig.tight_layout()
+    return fig
 
 
 def plot_cluster_centers(
-    vae: VAE,
+    vae: VAEPredictor,
     input_sample: xr.DataArray,
     plot_reordering: np.ndarray | None = None,
     **kwargs,
-):
+) -> plt.Figure:
     """
-    Plot the center of the CMM-VAE clusters in input space.
+    Plot the center of the CMM-VAE clusters in input space, based on decoding the 
+    mixture components in latent space.
 
     :param vae: The CMM-VAE used to calculate cluster centers
     :param input_sample: A sample of input data (e.g., Z500) used for latitude and longitude axes
@@ -108,10 +110,10 @@ def plot_cluster_centers(
             input_sample.latitude,
             input_sample.longitude,
         ],
-        dims=["label", "latitude", "longitude"],
+        dims=["cluster", "latitude", "longitude"],
     )
     titles = [f"Cluster {i}" for i in range(vae.cfg.cluster_number)]
-    plot_set_of_maps(
+    return _plot_set_of_maps(
         cluster_centers,
         titles,
         "True cluster centers (calculated by decoding mixture components)",
@@ -122,20 +124,20 @@ def plot_cluster_centers(
 
 def plot_empirical_cluster_centers(
     input_with_labels: xr.DataArray, plot_reordering: np.ndarray | None = None, **kwargs
-):
+) -> plt.Figure:
     """
     Plot cluster centers on a set of maps.
 
     :param input_with_labels: The input data (e.g., z500) for all time steps. Must have
                               dimensions "time", "latitude", and "longitude". The time
-                              dimension must have a coordinate named "label" that contains
+                              dimension must have a coordinate named "cluster" that contains
                               the cluster labels for each time step.
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
     :param kwargs:          Other arguments, passed to the contourf function for plotting.
     """
 
-    cluster_centers = input_with_labels.groupby("label").mean()
-    labels_data = input_with_labels.label.values
+    cluster_centers = input_with_labels.groupby("cluster").mean()
+    labels_data = input_with_labels.cluster.values
 
     cluster_number = cluster_centers.values.shape[0]
     cluster_counts = [
@@ -147,7 +149,7 @@ def plot_empirical_cluster_centers(
         f"Cluster {i}, {cluster_frequencies[i]*100:.1f}%" for i in range(cluster_number)
     ]
 
-    plot_set_of_maps(
+    return _plot_set_of_maps(
         cluster_centers,
         titles,
         "Empirical cluster centers",
@@ -161,7 +163,7 @@ def plot_spatial_odds_ratio(
     plot_reordering: np.ndarray | None = None,
     vmax: int = 5,
     **kwargs,
-):
+) -> plt.Figure:
     """
     Plot, for each cluster and at each grid point, the mean of a binary target within the
     cluster divided by the mean of that target over all times. This corresponds to the
@@ -170,13 +172,13 @@ def plot_spatial_odds_ratio(
     :param target_binary_with_labels: The target data (e.g., exceedance of a precipitation
                                       threshold) for all time steps. Must have dimensions
                                       "time", "latitude", and "longitude". The time dimension
-                                      must have a coordinate named "label" that contains the
+                                      must have a coordinate named "cluster" that contains the
                                       cluster labels for each time step.
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
     :param vmax: used to set the contour levels, which will be [1/vmax, 1/(vmax-1), ... . vmax-1, vmax)]
     :param kwargs:          Other arguments, passed to the contourf function for plotting.
     """
-    target_mean_by_cluster = target_binary_with_labels.groupby("label").mean()
+    target_mean_by_cluster = target_binary_with_labels.groupby("cluster").mean()
     target_mean_all = target_binary_with_labels.mean("time")
     odds_ratio = target_mean_by_cluster / target_mean_all
 
@@ -187,7 +189,7 @@ def plot_spatial_odds_ratio(
     cluster_number = odds_ratio.values.shape[0]
     titles = [f"Cluster {i}" for i in range(cluster_number)]
 
-    plot_set_of_maps(
+    return _plot_set_of_maps(
         odds_ratio,
         titles,
         "Odds ratio of target variable within each cluster",
@@ -198,8 +200,8 @@ def plot_spatial_odds_ratio(
 
 
 def plot_reordered_centers_and_odds_ratio(
-    vae: VAE, inputs: xr.DataArray, target_binary: xr.DataArray
-):
+    vae: VAEPredictor, inputs: xr.DataArray, target_binary: xr.DataArray
+) -> tuple[plt.Figure, plt.Figure, plt.Figure]:
     """
     Plot a summary of the CMM-VAE clusters characteristics: centers (both empirical and
     decoded) and odds ratio of a binary target.
@@ -226,20 +228,22 @@ def plot_reordered_centers_and_odds_ratio(
     )
     label_reordering = target_global_mean_by_cluster.argsort().values
 
-    plot_cluster_centers(
+    fig1 = plot_cluster_centers(
         vae,
         inputs[0],
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )
-    plot_empirical_cluster_centers(
+    fig2 = plot_empirical_cluster_centers(
         inputs_with_label,
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )
-    plot_spatial_odds_ratio(
+    fig3 = plot_spatial_odds_ratio(
         target_binary_with_label,
         plot_reordering=label_reordering,
         cmap="PuOr",
         extend="both",
     )
+    return fig1, fig2, fig3
+

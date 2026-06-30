@@ -143,7 +143,7 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     """
     fig, ax = plt.subplots(figsize=(16, 9), dpi=300)
     plt.title(label="Model Loss by Epoch", loc="center")
-    ax.plot(training_loss, label="Training Data", color="white")
+    ax.plot(training_loss, label="Training Data", color="gray")
     ax.plot(validation_loss, label="Test Data", color="red")
     ax.set(xlabel="Epoch", ylabel="Loss")
     plt.legend()

@@ -1,6 +1,6 @@
 import numpy as np
 import xarray as xr
-from package_name.training.vae import VAE
+from package_name.inference.predictor import VAEPredictor
 from package_name.data_processing.data_processor import flatten_input
 
 
@@ -13,7 +13,7 @@ def _predict_clusters_from_encoder_output(encoder_output: dict):
 
 
 def predict_clusters(
-    vae: VAE,
+    vae: VAEPredictor,
     inputs: np.ndarray,
 ) -> np.ndarray:
     """Label a set of input data (e.g., Z500) using the most probable cluster predicted by a CMM-VAE.
@@ -35,7 +35,7 @@ def predict_clusters(
     return cluster_labels
 
 
-def calculate_cluster_centers(vae: VAE) -> np.ndarray:
+def calculate_cluster_centers(vae: VAEPredictor) -> np.ndarray:
     """
     Get cluster centers in input space by decoding the means of the mixture components in latent space.
 

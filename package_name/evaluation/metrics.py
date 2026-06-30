@@ -1,11 +1,11 @@
 import numpy as np
 import xarray as xr
-from package_name.training.vae import VAE
+from package_name.inference.predictor import VAEPredictor
 from package_name.evaluation.utils import predict_clusters
 
 
 def compute_BSS_quantile_exceedance(
-    vae: VAE, inputs: np.ndarray, targets: np.ndarray, q: float
+    vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, q: float
 ) -> float:
     """
     Compute the Brier skill score for the classification of the exceedance of a quantile
@@ -27,7 +27,7 @@ def compute_BSS_quantile_exceedance(
 
 
 def compute_BSS_quantile_prediction(
-    vae: VAE, inputs: np.ndarray, targets: np.ndarray, N: int
+    vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, N: int
 ) -> float:
     """
     Compute the Brier skill score for the classification of the quantile indices of a
@@ -48,7 +48,7 @@ def compute_BSS_quantile_prediction(
 
 
 def compute_BSS_clusters_target(
-    vae: VAE, inputs: np.ndarray, targets_categorical: np.ndarray
+    vae: VAEPredictor, inputs: np.ndarray, targets_categorical: np.ndarray
 ) -> float:
     """
     Compute the Brier skill score for the classification of a binary or categorical
