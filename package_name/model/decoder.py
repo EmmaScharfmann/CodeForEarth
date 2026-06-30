@@ -2,7 +2,7 @@ import keras
 from tensorflow.keras.layers import Input, Dense
 from tensorflow.keras.models import Model
 
-from package_name.training.utils import DecoderConfig
+from package_name.model.utils import DecoderConfig
 
 
 class DecoderBuilder:
