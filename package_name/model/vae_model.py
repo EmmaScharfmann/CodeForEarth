@@ -8,7 +8,13 @@ from package_name.model.loss import VAELoss
 
 
 class VAEModel(Model):
-    def __init__(self, encoder: Model, decoder: Model, custom_loss: VAELoss, **kwargs):
+    def __init__(
+        self,
+        encoder: Model,
+        decoder: Model,
+        custom_loss: VAELoss | None = None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.encoder = encoder
         self.decoder = decoder
@@ -30,6 +36,9 @@ class VAEModel(Model):
         :param kwargs:          Other arguments, to match the parent function `call`.
         :return:                A dictionary with the encoder output and decoder output.
         """
+        if self.custom_loss is None:
+            raise ValueError("A custom loss is necessary for training.")
+
         encoder_output = self.encoder(encoder_input)
         z = encoder_output["latent"]["z"]
         decoder_output = self.decoder({"z": z})
@@ -78,3 +87,5 @@ class VAEModel(Model):
             self.mixture_regularization_loss_tracker,
             self.total_loss_tracker,
         ]
+    def build(self, input_shape=None):
+        super().build(input_shape)

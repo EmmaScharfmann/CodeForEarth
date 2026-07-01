@@ -182,3 +182,31 @@ def sampling(args: tuple[tf.Tensor, float]) -> tf.Tensor:
         shape=(K.shape(z_mean)[0], K.int_shape(z_mean)[1]), mean=0.0, stddev=1.0
     )
     return z_mean + K.exp(0.5 * z_log_sigma) * epsilon
+
+
+def construct_encoder_config(cfg: VAEConfig) -> EncoderConfig:
+    """Construct the encoder config from the VAEConfig object."""
+    return EncoderConfig(
+        original_dim=cfg.original_dim,
+        original_dim_target=cfg.original_dim_target,
+        dim_layer1=cfg.dim_layer1,
+        dim_layer2=cfg.dim_layer2,
+        dim_layer3=cfg.dim_layer3,
+        activation=cfg.activation,
+        cluster_number=cfg.cluster_number,
+        latent_dim=cfg.latent_dim,
+        pr_cluster_number=cfg.pr_cluster_number,
+        sampling_fn=cfg.sampling_fn,
+    )
+
+
+def construct_decoder_config(cfg: VAEConfig) -> DecoderConfig:
+    """Construct the decoder config from the VAEConfig object."""
+    return DecoderConfig(
+        dim_layer1=cfg.dim_layer1,
+        dim_layer2=cfg.dim_layer2,
+        dim_layer3=cfg.dim_layer3,
+        activation=cfg.activation,
+        latent_dim=cfg.latent_dim,
+        original_dim=cfg.original_dim,
+    )
