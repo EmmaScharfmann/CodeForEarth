@@ -84,14 +84,20 @@ class Loss:
     cluster_target_regularisation: tf.Tensor  # (1,)
     mixture_regularization: tf.Tensor  # (1,)
 
+    vae_reconstruction_loss_factor: float = 1.0
+    vae_regularisation_loss_factor: float = 1.0
+    target_prediction_loss_factor: float = 1.0
+    cluster_target_regularisation_loss_factor: float = 1.0
+    mixture_regularization_loss_factor: float = 1.0
+
     @property
     def total(self):
         return (
-            self.vae_reconstruction
-            + self.vae_regularisation
-            + self.target_prediction
-            + self.cluster_target_regularisation
-            + self.mixture_regularization
+            self.vae_reconstruction * self.vae_reconstruction_loss_factor
+            + self.vae_regularisation * self.vae_regularisation_loss_factor
+            + self.target_prediction * self.target_prediction_loss_factor
+            + self.cluster_target_regularisation * self.cluster_target_regularisation_loss_factor
+            + self.mixture_regularization * self.mixture_regularization_loss_factor
         )
 
 

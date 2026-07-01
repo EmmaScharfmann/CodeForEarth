@@ -4,6 +4,7 @@ import numpy as np
 import xarray as xr
 from numpy import ndarray
 import cartopy.feature as cfeature
+import tensorflow as tf
 
 
 
@@ -95,6 +96,9 @@ def preprocess_dataset(
     elif geographical_filter == "new atlantic":
         latitude = (20, 80)
         longitude = (-50, 30)
+    elif geographical_filter == "extended europe":
+        latitude = (25, 80)
+        longitude = (-20, 40)
     elif geographical_filter == 'global':
         latitude = None
         longitude = None
@@ -141,10 +145,49 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     :param training_loss:   The training loss.
     :param validation_loss: The validation loss.
     """
-    fig, ax = plt.subplots(figsize=(16, 9), dpi=300)
+    fig, ax = plt.subplots(figsize=(12, 5), dpi=300)
     plt.title(label="Model Loss by Epoch", loc="center")
     ax.plot(training_loss, label="Training Data", color="white")
     ax.plot(validation_loss, label="Test Data", color="red")
+    ax.set(xlabel="Epoch", ylabel="Loss")
+    plt.legend()
+    plt.show()
+
+def plot_all_losses(history: tf.keras.callbacks.History):
+    """
+    Plot the training loss and validation loss.
+
+    :param history:   The history of the model.
+    """
+    #normalize the losses by the maximum value of that loss
+    for key in history.history.keys():
+        #cut out first 2 epochs to avoid the initial spike in loss
+        history.history[key] = history.history[key][2:]
+        max_value = max(history.history[key])
+        if max_value != 0:
+            history.history[key] = [x / max_value for x in history.history[key] ]
+
+    x = np.arange(2, len(history.history["total_loss"])+2)
+    fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
+    plt.title(label="Model Loss by Epoch", loc="center")
+    ax.plot(x, history.history["total_loss"], label="Total Loss", color="red", linewidth=2)
+    ax.plot(x, history.history["val_total_loss"], color="red", linewidth=1)
+
+    ax.plot(x, history.history["reconstruction_loss"], label="Reconstruction Loss", color="blue", linewidth=2)
+    ax.plot(x, history.history["val_reconstruction_loss"], color="blue", linewidth=1)
+
+    ax.plot(x, history.history["vae_regularisation_loss"], label="VAE Regularisation Loss", color="green", linewidth=2)
+    ax.plot(x, history.history["val_vae_regularisation_loss"], color="green", linewidth=1)
+
+    ax.plot(x, history.history["target_prediction_loss"], label="Target Prediction Loss", color="orange", linewidth=2)
+    ax.plot(x, history.history["val_target_prediction_loss"], color="orange", linewidth=1)
+
+    ax.plot(x, history.history["cluster_target_regularisation_loss"], label="Cluster Target Regularisation Loss", color="purple", linewidth=2)
+    ax.plot(x, history.history["val_cluster_target_regularisation_loss"], color="purple", linewidth=1)
+
+    ax.plot(x, history.history["mixture_regularization_loss"], label="Mixture Regularization Loss", color="brown", linewidth=2)
+    ax.plot(x, history.history["val_mixture_regularization_loss"], color="brown", linewidth=1)
+    
     ax.set(xlabel="Epoch", ylabel="Loss")
     plt.legend()
     plt.show()

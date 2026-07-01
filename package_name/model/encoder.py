@@ -1,6 +1,7 @@
 import keras
 from tensorflow.keras.layers import Input, Dense, Reshape, Lambda
 from tensorflow.keras.models import Model
+from tensorflow.keras.regularizers import l2
 
 from package_name.model.utils import EncoderConfig
 
@@ -81,7 +82,8 @@ class EncoderBuilder:
         mu = Reshape(target_shape=(cfg.cluster_number, cfg.latent_dim), name="mu")(
             mu_vector
         )
-        pi = Dense(cfg.cluster_number, activation="softmax", name="pi")(dummy_input)
+        pi = Dense(cfg.cluster_number, activation="softmax", name="pi", kernel_initializer="glorot_uniform", bias_initializer="zeros",
+        )(dummy_input) #changed
 
         return {"mu": mu, "pi": pi}
 
@@ -95,11 +97,11 @@ class EncoderBuilder:
             clusters_input
         )
         target_pred = Dense(
-            cfg.pr_cluster_number, activation="softmax", name="target_pred"
+            cfg.pr_cluster_number, activation="softmax", name="target_pred", kernel_regularizer=l2(0.01),
         )(clusters_input)
 
         clusters_pred_from_target = Dense(
-            cfg.cluster_number, activation="softmax", name="cr"
+            cfg.cluster_number, activation="softmax", name="cr", 
         )(target_pred)
 
         return {
