@@ -5,6 +5,38 @@ import xarray as xr
 from numpy import ndarray
 import cartopy.feature as cfeature
 import tensorflow as tf
+from sklearn.cluster import KMeans
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+
+def cluster_country_wise(
+    df_in: pd.DataFrame, cluster_number: int, standardize: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Preprocesses country-wise data (impute, optional scale) and applies KMeans clustering.
+
+    :param df_in:           The country-wise dataframe to be clustered (only
+    countries as columns).
+    :param cluster_number:   The number of clusters to be created.
+    :param standardize:     If True, normalizes data (mean=0, std=1). If False,
+    only imputes NaNs.
+    :return:                A tuple containing:
+                            1. Dataframe of preprocessed features (imputed or
+                            imputed+scaled).
+                            2. Dataframe with the cluster labels for each day.
+    """
+    X_clean = SimpleImputer(strategy="mean").fit_transform(df_in)
+
+    if standardize:
+        X_clean = StandardScaler().fit_transform(X_clean)
+
+    kmeans = KMeans(n_clusters=cluster_number, random_state=0)
+    cluster_labels = kmeans.fit_predict(X_clean)
+    df_labels = pd.DataFrame({"labels": cluster_labels}, index=df_in.index)
+    df_norm = pd.DataFrame(X_clean, columns=df_in.columns, index=df_in.index)
+
+    return df_norm, df_labels
 
 
 
@@ -168,7 +200,7 @@ def plot_all_losses(history: tf.keras.callbacks.History):
             history.history[key] = [x / max_value for x in history.history[key] ]
 
     x = np.arange(2, len(history.history["total_loss"])+2)
-    fig, ax = plt.subplots(figsize=(12, 8), dpi=300)
+    fig, ax = plt.subplots(figsize=(12, 6), dpi=300)
     plt.title(label="Model Loss by Epoch", loc="center")
     ax.plot(x, history.history["total_loss"], label="Total Loss", color="red", linewidth=2)
     ax.plot(x, history.history["val_total_loss"], color="red", linewidth=1)
