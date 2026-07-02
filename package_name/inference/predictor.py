@@ -25,7 +25,7 @@ class VAEPredictor:
         )
 
     # TODO: change the encoder structure to only have to pass X instead of having to pass dummies "dummy" and "target" alongside.
-    def encode(self, input: dict[str, np.ndarray], batch_size: int) -> np.ndarray:
+    def encode(self, input: dict[str, np.ndarray], batch_size: int | None = None) -> np.ndarray:
         """
         Encode the given input `X`.
 
@@ -40,7 +40,7 @@ class VAEPredictor:
         """
         return self._encoder.predict(x=input, batch_size=batch_size)
 
-    def decode(self, z: np.ndarray, batch_size: int) -> np.ndarray:
+    def decode(self, z: np.ndarray, batch_size: int | None = None) -> np.ndarray:
         """
         Decode the given input `z`.
 

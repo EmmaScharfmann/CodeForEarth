@@ -34,8 +34,8 @@ def train_val_split(
     """
     X_train_raw, X_val_raw, y_train, y_val = train_test_split(X, y, test_size=test_size)
 
-    X_train = _flatten(X=X_train_raw)
-    X_val = _flatten(X=X_val_raw)
+    X_train = flatten_input(X=X_train_raw)
+    X_val = flatten_input(X=X_val_raw)
 
     train_inputs = _build_inputs(X_train, y_train)
     val_inputs = _build_inputs(X_val, y_val)
@@ -43,10 +43,26 @@ def train_val_split(
     return train_inputs, val_inputs
 
 
-def _flatten(X: np.ndarray) -> np.ndarray:
-    """Flatten the input array into a numpy array."""
+def flatten_input(X: np.ndarray) -> np.ndarray:
+    """Flatten the two last dimensions of a 3-dimensional input array into a single dimension.
+
+    :param X:   The 3-dimensional input array to flatten.
+    :return:    The flattened, 2-dimensional array.
+    """
     nt, ny, nx = X.shape
-    return np.reshape(X, (nt, ny * nx), order="F")
+    return np.reshape(X, (nt, ny * nx))
+
+
+def unflatten_input(X: np.ndarray, ny: int, nx: int) -> np.ndarray:
+    """Reshape a 2-dimensional input array into a 3-dimensional array.
+
+    :param X:   The 2-dimensional input array to reshape.
+    :param ny:  The size of the second dimension in the output array (number of latitudes).
+    :param nx:  The size of the third dimension in the output array (number of longitudes).
+    :return:    The reshaped, 3-dimensional array.
+    """
+    nt = X.shape[0]
+    return np.reshape(X, (nt, ny, nx))
 
 
 def _build_inputs(

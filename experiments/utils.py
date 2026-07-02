@@ -97,7 +97,7 @@ def preprocess_dataset(
                                     Supported values are:
                                     ``"mediterranean"``, ``"morocco"``,
                                     ``"larger mediterranean"``, ``"atlantic"``,
-                                    ``"north atlantic"``, ``"cca"``, and ``"new atlantic"``.
+                                    ``"north atlantic"``, ``"cca"``, ``"new atlantic"``, and ``"global"``.
     :param months_filter:           List of months to retain, expressed as integers between 1 and 12.
     :param anomalies:               If True, remove the mean for each day of the year, producing daily anomalies.
     :param normalization:           If True, divide the data by its standard deviation over the time dimension.
@@ -179,7 +179,7 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     """
     fig, ax = plt.subplots(figsize=(12, 5), dpi=300)
     plt.title(label="Model Loss by Epoch", loc="center")
-    ax.plot(training_loss, label="Training Data", color="white")
+    ax.plot(training_loss, label="Training Data", color="gray")
     ax.plot(validation_loss, label="Test Data", color="red")
     ax.set(xlabel="Epoch", ylabel="Loss")
     plt.legend()

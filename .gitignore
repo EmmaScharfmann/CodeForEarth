@@ -227,3 +227,6 @@ __marimo__/
 *.h5
 *.nc
 *.csv
+
+# Data folder
+data/
