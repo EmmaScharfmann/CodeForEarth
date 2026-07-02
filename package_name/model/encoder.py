@@ -1,5 +1,5 @@
 import keras
-from tensorflow.keras.layers import Input, Dense, Reshape, Lambda
+from tensorflow.keras.layers import Input, Dense, Dropout, Reshape, Lambda
 from tensorflow.keras.models import Model
 from tensorflow.keras.regularizers import l2
 
@@ -7,8 +7,9 @@ from package_name.model.utils import EncoderConfig
 
 
 class EncoderBuilder:
-    def __init__(self, config: EncoderConfig):
+    def __init__(self, config: EncoderConfig, training: bool):
         self.cfg = config
+        self.training = training
 
     def build(self) -> Model:
         """
@@ -52,7 +53,9 @@ class EncoderBuilder:
         x = Dense(cfg.dim_layer1, activation=cfg.activation, name="enc_dense_1")(
             vector_input
         )
+        x = Dropout(0.3)(x, training=self.training)
         x = Dense(cfg.dim_layer2, activation=cfg.activation, name="enc_dense_2")(x)
+        x = Dropout(0.2)(x, training=self.training)
         x = Dense(cfg.dim_layer3, activation=cfg.activation, name="enc_dense_3")(x)
 
         return x
@@ -96,9 +99,10 @@ class EncoderBuilder:
         clusters_pred = Dense(cfg.cluster_number, activation="softmax", name="c")(
             clusters_input
         )
+        target_pred_input_dropped = Dropout(0.3)(clusters_input, training=self.training)
         target_pred = Dense(
-            cfg.pr_cluster_number, activation="softmax", name="target_pred", kernel_regularizer=l2(0.01),
-        )(clusters_input)
+            cfg.pr_cluster_number, activation="softmax", name="target_pred", #kernel_regularizer=l2(0.01),
+        )(target_pred_input_dropped)
 
         clusters_pred_from_target = Dense(
             cfg.cluster_number, activation="softmax", name="cr", 

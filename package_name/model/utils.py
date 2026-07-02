@@ -75,20 +75,22 @@ class EncoderOutput:
 class DecoderOutput:
     x_recon: tf.Tensor  # (batch, *input_shape)
 
-
 @dataclass
-class Loss:
-    vae_reconstruction: tf.Tensor  # (1,)
-    vae_regularisation: tf.Tensor  # (1,)
-    target_prediction: tf.Tensor  # (1,)
-    cluster_target_regularisation: tf.Tensor  # (1,)
-    mixture_regularization: tf.Tensor  # (1,)
-
+class LossFactorsConfig:
     vae_reconstruction_loss_factor: float = 1.0
     vae_regularisation_loss_factor: float = 1.0
     target_prediction_loss_factor: float = 1.0
     cluster_target_regularisation_loss_factor: float = 1.0
     mixture_regularization_loss_factor: float = 1.0
+    dirichlet_loss_factor: float = 1.0
+
+@dataclass
+class Loss(LossFactorsConfig):
+    vae_reconstruction: tf.Tensor = None  # (1,)
+    vae_regularisation: tf.Tensor = None  # (1,)
+    target_prediction: tf.Tensor = None  # (1,)
+    cluster_target_regularisation: tf.Tensor = None  # (1,)
+    mixture_regularization: tf.Tensor = None  # (1,)
 
     @property
     def total(self):
@@ -100,11 +102,22 @@ class Loss:
             + self.mixture_regularization * self.mixture_regularization_loss_factor
         )
 
+    def individual_losses(self):
+        return {
+            "vae_reconstruction": self.vae_reconstruction,
+            "vae_regularisation": self.vae_regularisation,
+            "target_prediction": self.target_prediction,
+            "cluster_target_regularisation": self.cluster_target_regularisation,
+            "mixture_regularization": self.mixture_regularization,
+        }
+
+
 
 @dataclass
 class GaussianDistribution:
     mean: tf.Tensor
     log_var: tf.Tensor
+
 
 
 def format_encoder_output_as_object(encoder_output: dict) -> EncoderOutput:

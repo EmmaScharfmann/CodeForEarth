@@ -25,6 +25,15 @@ class VAEModel(Model):
         self.cluster_target_regularisation_loss_tracker = tf.keras.metrics.Mean(name="cluster_target_regularisation_loss")
         self.mixture_regularization_loss_tracker = tf.keras.metrics.Mean(name="mixture_regularization_loss")
         self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+        
+        self.tracker_mapping = {
+            "vae_reconstruction": self.reconstruction_loss_tracker,
+            "vae_regularisation": self.vae_regularisation_loss_tracker,
+            "target_prediction": self.target_prediction_loss_tracker,
+            "cluster_target_regularisation": self.cluster_target_regularisation_loss_tracker,
+            "mixture_regularization": self.mixture_regularization_loss_tracker,
+            "total": self.total_loss_tracker,}
+
 
 
     @override
@@ -55,12 +64,12 @@ class VAEModel(Model):
             ),
         )
         self.add_loss(tf.reduce_mean(losses.total))
-        self.reconstruction_loss_tracker.update_state(losses.vae_reconstruction)
-        self.vae_regularisation_loss_tracker.update_state(losses.vae_regularisation)
-        self.target_prediction_loss_tracker.update_state(losses.target_prediction)
-        self.cluster_target_regularisation_loss_tracker.update_state(losses.cluster_target_regularisation)
-        self.mixture_regularization_loss_tracker.update_state(losses.mixture_regularization)
         self.total_loss_tracker.update_state(losses.total)
+
+        for loss_key, tensor_value in losses.individual_losses().items():
+            self.tracker_mapping[loss_key].update_state(tensor_value)
+
+            
         return {
             "encoder_output": {
                 "latent": {

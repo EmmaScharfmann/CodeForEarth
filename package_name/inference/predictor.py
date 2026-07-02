@@ -14,26 +14,9 @@ class VAEPredictor:
     def __init__(
         self,
         cfg: VAEConfig,
-        reconstruction_loss_factor: float = 0.5,
-        dirichlet_loss_factor: float = 0.5,
-        regularisation_loss_factor: float = 0.5,
-        target_prediction_loss_factor: float = 0.5,
-        cluster_target_regularisation_loss_factor: float = 0.5,
-        mixture_regularization_loss_factor: float = 0.5,
     ) -> None:
         self.cfg = cfg
-        self.custom_loss = VAELoss(
-            reconstruction_loss_factor=reconstruction_loss_factor,
-            dirichlet_loss_factor=dirichlet_loss_factor,
-            original_dim=cfg.original_dim,
-            pr_cluster_number=cfg.pr_cluster_number,
-            regularisation_loss_factor=regularisation_loss_factor,
-            target_prediction_loss_factor=target_prediction_loss_factor,
-            cluster_target_regularisation_loss_factor=cluster_target_regularisation_loss_factor,
-            mixture_regularization_loss_factor=mixture_regularization_loss_factor,
-        )
-
-        self._encoder = EncoderBuilder(construct_encoder_config(cfg=self.cfg)).build()
+        self._encoder = EncoderBuilder(construct_encoder_config(cfg=self.cfg), training=False).build()
         self._decoder = DecoderBuilder(construct_decoder_config(cfg=self.cfg)).build()
         self._model = VAEModel(
             encoder=self._encoder,
