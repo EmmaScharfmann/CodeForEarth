@@ -214,6 +214,7 @@ def plot_reordered_centers_and_odds_ratio(
                           for all time steps. Must have the same shape and dimensions as "inputs".
     """
 
+    
     cluster_labels = predict_clusters(vae, inputs.values)
     inputs_with_label = inputs.assign_coords(cluster=("time", cluster_labels))
     target_binary_with_label = target_binary.assign_coords(

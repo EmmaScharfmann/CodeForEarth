@@ -165,7 +165,7 @@ def reshape_data_for_clustering(
     data = xarray_data.values
 
     nt, ny, nx = data.shape
-    data = np.reshape(data, [nt, ny * nx], order="F")
+    data = np.reshape(data, [nt, ny * nx])
 
     return data
 
