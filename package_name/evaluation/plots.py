@@ -228,7 +228,6 @@ def plot_reordered_centers_and_odds_ratio(
         cluster=("time", cluster_labels)
     )
 
-    # Reorder clusters by mean target for plotting
     target_global_mean_by_cluster = (
         target_binary_with_label.mean(("latitude", "longitude"))
         .groupby("cluster")
