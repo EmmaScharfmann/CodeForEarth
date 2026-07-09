@@ -16,9 +16,11 @@ def compute_BSS_quantile_exceedance(
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-                   # latitudes, # longitudes)
+        # latitudes, # longitudes)
     :param targets: The target data for all time steps. Shape (# times, ...)
     :param q: The quantile threshold, between 0 and 1.
+    :return: Brier skill score for the classification of the exceedance of the
+        quantile threshold by the clusters.
     """
     target_quantile = np.nanquantile(targets, q=q, axis=0)
     target_quantile_exceedance = (targets > target_quantile).astype(int)
@@ -38,9 +40,11 @@ def compute_BSS_quantile_prediction(
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-                   # latitudes, # longitudes)
+        # latitudes, # longitudes)
     :param targets: The target data for all time steps. Shape (# times, ...)
     :param N: The number of quantiles to consider.
+    :return: Brier skill score for the classification of the quantile indices of the
+             target variable by the clusters.
     """
     quantiles_one_hot = _compute_one_hot_quantiles(targets, N)
 
@@ -56,12 +60,13 @@ def compute_BSS_clusters_target(
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-                   # latitudes, # longitudes)
-    :param targets_categorical: The target data for all time steps. Must be categorical or binary
-                    (e.g., exceedance of a precipitation threshold). Shape (# times, ...,
-                    # classes), with the last dimension being a one-hot encoding of the
-                    class. All other dimensions will be pooled together for the
-                    calculation of the score.
+        # latitudes, # longitudes)
+    :param targets_categorical: The target data for all time steps. Must be categorical
+        or binary (e.g., exceedance of a precipitation threshold). Shape (# times, ...,
+        # classes), with the last dimension being a one-hot encoding of the class. All
+        other dimensions will be pooled together for the calculation of the score.
+    :return: Brier skill score for the classification of the target variable by the
+             clusters.
     """
     cluster_labels = predict_clusters(vae, inputs)
 
@@ -91,7 +96,6 @@ def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     :param y_prob: Predicted probabilities for each class, with shape (None, n_classes).
     :return:       Brier score.
     """
-
     brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=1))
 
     return brier_score
@@ -106,12 +110,12 @@ def _compute_brier_skill_score(
     performance, and negative values mean worse than the reference model.
 
     :param y_true: True labels (one-hot encoded), with shape (n_samples, n_classes).
-    :param y_prob: Predicted probabilities for each class, with shape (n_samples, n_classes).
-    :param y_prob_ref: Predicted probabilities from a reference model for each class, with
-                       shape (None, n_classes).
-    :return:       Brier skill score.
+    :param y_prob: Predicted probabilities for each class, with shape (n_samples,
+        n_classes).
+    :param y_prob_ref: Predicted probabilities from a reference model for each class,
+        with shape (None, n_classes).
+    :return: Brier skill score.
     """
-
     brier_score_model = _compute_brier_score(y_true, y_prob)
     brier_score_ref = _compute_brier_score(y_true, y_prob_ref)
 
@@ -125,9 +129,11 @@ def _compute_mean_target_per_cluster(
     For an array of targets and an array of cluster labels, compute the mean
     target for each cluster. Uses xarray groupby.
 
-    :param targets: An array of shape (n_samples, ...) containing target data (usually binary or categorical)
+    :param targets: An array of shape (n_samples, ...) containing target data (usually
+        binary or categorical)
     :param cluster_labels: An array of shape (n_samples,) containing the cluster labels
-    :return: An array of shape (n_clusters, ...) containing the mean target for each cluster
+    :return: An array of shape (n_clusters, ...) containing the mean target for each
+        cluster
     """
     n_dims = len(targets.shape)
     targets_xr = xr.DataArray(targets, dims=[f"dim{i}" for i in range(n_dims)])
@@ -142,9 +148,11 @@ def _compute_target_from_cluster(
     For an array of targets and an array of cluster labels, compute the mean
     target for each cluster and assign it to all the samples that fall in that cluster.
 
-    :param targets: An array of shape (n_samples, ...) containing target data (usually binary or categorical)
+    :param targets: An array of shape (n_samples, ...) containing target data (usually
+        binary or categorical)
     :param cluster_labels: An array of shape (n_samples,) containing the cluster labels
-    :return: An array of shape (n_samples, ...) containing the targets assigned to each sample based on its cluster label
+    :return: An array of shape (n_samples, ...) containing the targets assigned to each
+        sample based on its cluster label
     """
     mean_target_per_cluster = _compute_mean_target_per_cluster(targets, cluster_labels)
     return mean_target_per_cluster[cluster_labels.astype(np.int32)]
@@ -188,6 +196,7 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
 
     :param x: Input array for which one-hot encoding of quantiles will be computed
     :param N: Number of quantiles
+    :return: One-hot encoding of the quantile indices of x along its first axis.
     """
     quantile_indices = _compute_quantile_indices(x, N)
     one_hot = (quantile_indices[..., None] == np.arange(N)).astype(int)

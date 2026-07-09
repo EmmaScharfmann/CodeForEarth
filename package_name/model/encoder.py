@@ -91,15 +91,15 @@ class EncoderBuilder:
         """Build the cluster outputs, either directly from the input variable (cluster_pred) or from the target variable (target_cluster_pred)."""
         cfg = self.cfg
 
-        clusters_pred = Dense(cfg.cluster_number, activation="softmax", name="c")(
-            clusters_input
-        )
+        clusters_pred = Dense(
+            cfg.cluster_number, activation="softmax", name="clusters_pred"
+        )(clusters_input)
         target_pred = Dense(
             cfg.pr_cluster_number, activation="softmax", name="target_pred"
         )(clusters_input)
 
         clusters_pred_from_target = Dense(
-            cfg.cluster_number, activation="softmax", name="cr"
+            cfg.cluster_number, activation="softmax", name="target_clusters_pred"
         )(target_pred)
 
         return {

@@ -17,15 +17,17 @@ def _plot_single_map(
     """
     Plot data on a map
 
-    :param ax:  The matplotlib axis on which data is plotted. Has to have been defined using a cartopy projection
+    :param ax:  The matplotlib axis on which data is plotted. Has to have been defined
+        using a cartopy projection
     :param data: The data to be plotted, must have dimensions "latitude" and "longitude
     :param title: plot title
     :param borders: If True, add country borders to the map.
     :param kwargs:  Other arguments, passed to the contourf function for plotting.
+    :return: The contourf object created by the plotting function.
     """
     cf = data.plot.contourf(ax=ax, transform=ccrs.PlateCarree(), **kwargs)
     ax.coastlines()
-    if borders == True:
+    if borders:
         ax.add_feature(cfeature.BORDERS)
     ax.set_title(title)
     return cf
@@ -41,20 +43,21 @@ def _plot_set_of_maps(
     **kwargs,
 ) -> plt.Figure:
     """
-    Plot a list of maps
+    Plot a list of maps.
 
     :param data: The data to be plotted. Must have dimensions dim0, 'latitude', and
-                 'longitude'. (dim0 can have any name, but it has to be the first
-                 dimension of the data array)
+        'longitude'. (dim0 can have any name, but it has to be the first dimension of
+        the data array)
     :param titles: A list of titles for each subplot.
     :param suptitle: General plot title
     :param plot_reordering: A list of indices to reorder the plots. The first data
-                            instance to be plotted will be data[plot_reordering[0]], the
-                            second cluster will be data[plot_reordering[1]], and so on.
-                            If None, data will be plotted in its original order.
+        instance to be plotted will be data[plot_reordering[0]], the second cluster will
+        be data[plot_reordering[1]], and so on. If None, data will be plotted in its
+        original order.
     :param borders: If True, add country borders to the map.
     :param projection: The cartopy projection to use for the map.
     :param kwargs:  Other arguments, passed to the contourf function for plotting.
+    :return: The matplotlib figure object containing the plots.
     """
 
     plot_number = data.values.shape[0]
@@ -91,13 +94,15 @@ def plot_cluster_centers(
     **kwargs,
 ) -> plt.Figure:
     """
-    Plot the center of the CMM-VAE clusters in input space, based on decoding the 
+    Plot the center of the CMM-VAE clusters in input space, based on decoding the
     mixture components in latent space.
 
     :param vae: The CMM-VAE used to calculate cluster centers
-    :param input_sample: A sample of input data (e.g., Z500) used for latitude and longitude axes
+    :param input_sample: A sample of input data (e.g., Z500) used for latitude and
+        longitude axes
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
-    :param kwargs:          Other arguments, passed to the contourf function for plotting.
+    :param kwargs: Other arguments, passed to the contourf function for plotting.
+    :return: A matplotlib figure object containing the plots.
     """
     ny, nx = len(input_sample.latitude), len(input_sample.longitude)
     cluster_centers = calculate_cluster_centers(vae)
@@ -129,11 +134,11 @@ def plot_empirical_cluster_centers(
     Plot cluster centers on a set of maps.
 
     :param input_with_labels: The input data (e.g., z500) for all time steps. Must have
-                              dimensions "time", "latitude", and "longitude". The time
-                              dimension must have a coordinate named "cluster" that contains
-                              the cluster labels for each time step.
+        dimensions "time", "latitude", and "longitude". The time dimension must have a
+        coordinate named "cluster" that contains the cluster labels for each time step.
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
     :param kwargs:          Other arguments, passed to the contourf function for plotting.
+    :return: A matplotlib figure object containing the plots.
     """
 
     cluster_centers = input_with_labels.groupby("cluster").mean()
@@ -170,13 +175,13 @@ def plot_spatial_odds_ratio(
     odds ratio of the target within each cluster.
 
     :param target_binary_with_labels: The target data (e.g., exceedance of a precipitation
-                                      threshold) for all time steps. Must have dimensions
-                                      "time", "latitude", and "longitude". The time dimension
-                                      must have a coordinate named "cluster" that contains the
-                                      cluster labels for each time step.
+        threshold) for all time steps. Must have dimensions "time", "latitude", and
+        "longitude". The time dimension must have a coordinate named "cluster" that
+        contains the cluster labels for each time step.
     :param plot_reordering: A list of indices to reorder the clusters for plotting.
-    :param vmax: used to set the contour levels, which will be [1/vmax, 1/(vmax-1), ... . vmax-1, vmax)]
-    :param kwargs:          Other arguments, passed to the contourf function for plotting.
+    :param vmax: used to set the contour levels, which will be [1/vmax, 1/(vmax-1), ... , vmax-1, vmax]
+    :param kwargs: Other arguments, passed to the contourf function for plotting.
+    :return: A matplotlib figure object containing the plots.
     """
     target_mean_by_cluster = target_binary_with_labels.groupby("cluster").mean()
     target_mean_all = target_binary_with_labels.mean("time")
@@ -209,9 +214,12 @@ def plot_reordered_centers_and_odds_ratio(
 
     :param vae: The CMM-VAE used to calculate cluster centers
     :param inputs: The input data (e.g., z500) for all time steps. Must have dimensions
-                   "time", "latitude", and "longitude".
+        "time", "latitude", and "longitude".
     :param target_binary: The target data (e.g., exceedance of a precipitation threshold)
-                          for all time steps. Must have the same shape and dimensions as "inputs".
+        for all time steps. Must have the same shape and dimensions as "inputs".
+    :return: A tuple of three matplotlib figure objects containing the plots of the
+        decoded cluster centers, the empirical cluster centers, and the odds ratio of the
+        target variable within each cluster.
     """
 
     cluster_labels = predict_clusters(vae, inputs.values)
@@ -228,22 +236,21 @@ def plot_reordered_centers_and_odds_ratio(
     )
     label_reordering = target_global_mean_by_cluster.argsort().values
 
-    fig1 = plot_cluster_centers(
+    fig_cluster_centers = plot_cluster_centers(
         vae,
         inputs[0],
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )
-    fig2 = plot_empirical_cluster_centers(
+    fig_empirical_cluster_centers = plot_empirical_cluster_centers(
         inputs_with_label,
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )
-    fig3 = plot_spatial_odds_ratio(
+    fig_odds_ratio = plot_spatial_odds_ratio(
         target_binary_with_label,
         plot_reordering=label_reordering,
         cmap="PuOr",
         extend="both",
     )
-    return fig1, fig2, fig3
-
+    return fig_cluster_centers, fig_empirical_cluster_centers, fig_odds_ratio
