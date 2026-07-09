@@ -7,7 +7,9 @@ from package_name.training.trainer import VAETrainer
 
 # TODO: implement a proper cross validation which returns some evaluation metrics for each run, as well as a corresponding interval of confidence.
 class CrossValidator:
-    def __init__(self, vae: VAETrainer, filepath: str, cluster_number: int, n_runs: int = 20):
+    def __init__(
+        self, vae: VAETrainer, filepath: str, cluster_number: int, n_runs: int = 20
+    ):
         self.vae = vae
         self.filepath = filepath
         self.cluster_number = cluster_number

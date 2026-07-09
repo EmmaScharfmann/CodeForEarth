@@ -8,6 +8,7 @@ from package_name.model.utils import (
     construct_decoder_config,
     construct_encoder_config,
 )
+from package_name.inference.utils import build_inference_encoder
 
 
 class VAEPredictor:
@@ -23,24 +24,19 @@ class VAEPredictor:
             decoder=self._decoder,
             name="vae",
         )
+        self._inference_encoder = build_inference_encoder(full_encoder=self._encoder)
 
-    # TODO: change the encoder structure to only have to pass X instead of having to pass dummies "dummy" and "target" alongside.
-    def encode(self, input: dict[str, np.ndarray], batch_size: int) -> np.ndarray:
+    def encode(self, input: np.ndarray, batch_size: int | None = None) -> np.ndarray:
         """
         Encode the given input `X`.
 
-        :param input:       The encoder input with the following format:
-                            {"x": X,
-                             "dummy": np.ones((X.shape[0], 1)),
-                             "target": np.zeros((X.shape[0], vae.cfg.pr_cluster_number)),
-                            }
-                            where X is the matrix to encode.
+        :param input:       The encoder input 'X'
         :param batch_size:  The number of samples per batch of computation
         :return:            The encoded `X`.
         """
-        return self._encoder.predict(x=input, batch_size=batch_size)
+        return self._inference_encoder.predict(x=input, batch_size=batch_size)
 
-    def decode(self, z: np.ndarray, batch_size: int) -> np.ndarray:
+    def decode(self, z: np.ndarray, batch_size: int | None = None) -> np.ndarray:
         """
         Decode the given input `z`.
 
@@ -58,3 +54,23 @@ class VAEPredictor:
         """
         self._model.build()
         self._model.load_weights(path)
+
+    # TODO: Find a cleaner way to get the mixture components (mu and pi) from the encoder, without relying on a dummy input.
+    def get_mixture_components(self) -> dict[str, np.ndarray]:
+        """
+        Get the mixture components (cluster centers mu and probabilities pi) of the model.
+        This is done by passing a dummy input through the encoder and extracting the
+        mixture components from the output.
+
+        :return:    A dictionary with the mixture components "mu" and "pi".
+        """
+        dummy_input = {
+            "x": np.zeros((1, self.cfg.original_dim)),
+            "dummy": np.ones((1, 1)),
+            "target": np.zeros((1, self.cfg.pr_cluster_number)),
+        }
+        output = self._encoder.predict(x=dummy_input)
+        return {
+            "mu": output["mixture"]["mu"],
+            "pi": output["mixture"]["pi"],
+        }
