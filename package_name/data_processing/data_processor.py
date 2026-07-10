@@ -51,7 +51,7 @@ def flatten_input(X: np.ndarray) -> np.ndarray:
     :return:    The flattened, 2-dimensional array.
     """
     nt, ny, nx = X.shape
-    return np.reshape(X, (nt, ny * nx))
+    return np.reshape(X, (nt, ny * nx), order="F")
 
 
 def unflatten_input(X: np.ndarray, ny: int, nx: int) -> np.ndarray:

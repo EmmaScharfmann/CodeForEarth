@@ -1,6 +1,7 @@
 from tensorflow import Tensor
 from tensorflow.keras.losses import mse
 import tensorflow as tf
+from package_name.model.utils import LossFactorsConfig
 
 from package_name.model.utils import (
     Loss,
@@ -22,13 +23,11 @@ class VAELoss:
         self,
         original_dim: int,
         pr_cluster_number: int,
-        reconstruction_loss_factor: float,
-        dirichlet_loss_factor: float,
+        loss_factors: LossFactorsConfig,
     ):
         self.original_dim = original_dim
         self.pr_cluster_number = pr_cluster_number
-        self.reconstruction_loss_factor = reconstruction_loss_factor
-        self.dirichlet_loss_factor = dirichlet_loss_factor
+        self.loss_factors = loss_factors
 
     def compute(
         self,
@@ -63,6 +62,12 @@ class VAELoss:
                 clusters_output=encoder_output.clusters,
                 mixture_output=encoder_output.mixture,
             ),
+            vae_reconstruction_loss_factor=self.loss_factors.vae_reconstruction_loss_factor,
+            vae_regularisation_loss_factor=self.loss_factors.vae_regularisation_loss_factor,
+            target_prediction_loss_factor=self.loss_factors.target_prediction_loss_factor,
+            cluster_target_regularisation_loss_factor=self.loss_factors.cluster_target_regularisation_loss_factor,
+            mixture_regularization_loss_factor=self.loss_factors.mixture_regularization_loss_factor,
+            dirichlet_loss_factor=self.loss_factors.dirichlet_loss_factor,
         )
 
     def _calculate_vae_reconstruction_loss(
@@ -72,7 +77,6 @@ class VAELoss:
         return (
             mse(encoder_input.x, decoder_output.x_recon)
             * self.original_dim  # TODO: why * self.original_dim?
-            * self.reconstruction_loss_factor
         )
 
     def _calculate_target_prediction_loss(
@@ -87,7 +91,7 @@ class VAELoss:
         ) * tf.constant(  # TODO: why * self.pr_cluster_number?
             self.pr_cluster_number,
             dtype=target_true.dtype,
-        )
+        ) 
 
     def _calculate_mixture_regularisation(
         self, clusters_output: ClustersOutput, mixture_output: MixtureOutput
@@ -100,7 +104,7 @@ class VAELoss:
 
         # Dirichlet prior term: regularized mixture weights to avoid vanishing clusters
         dirichlet_loss = tf.reduce_sum(
-            -self.dirichlet_loss_factor
+            -self.loss_factors.dirichlet_loss_factor
             * tf.math.log(tf.maximum(mixture_output.pi, _EPSILON)),
             axis=-1,
         )
@@ -127,7 +131,7 @@ def _calculate_vae_regularisation_loss(
     gaussian_kl = tf.reduce_sum(
         component_kl * clusters_output.clusters_pred,
         axis=-1,
-    )
+    ) 
 
     return gaussian_kl
 
@@ -138,7 +142,7 @@ def _calculate_cluster_target_regularisation_loss(
     """Calculate the component of the loss ensuring that the cluster prediction made directly from the input variable (c) and that made from the target variable (cr) are close to each other"""
     return _calculate_categorical_kl_divergence(
         clusters_output.clusters_pred, clusters_output.target_clusters_pred
-    )
+    ) 
 
 
 def _calculate_gaussian_kl_divergence(

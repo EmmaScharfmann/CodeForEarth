@@ -97,6 +97,7 @@ def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     :return:       Brier score.
     """
     brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=1))
+    #brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=-1), axis=0)  # mean over samples, sum over classes
 
     return brier_score
 
