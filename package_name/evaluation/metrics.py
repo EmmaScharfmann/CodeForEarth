@@ -29,7 +29,9 @@ def compute_BSS_quantile_exceedance(
     exceedance = (targets > target_quantile).astype(int)
     one_hot_exceedance = np.stack([1 - exceedance, exceedance], axis=-1)
 
-    return compute_BSS_clusters_target(vae=vae, inputs=inputs, targets_categorical=one_hot_exceedance)
+    return compute_BSS_clusters_target(
+        vae=vae, inputs=inputs, targets_categorical=one_hot_exceedance
+    )
 
 
 def compute_BSS_quantile_prediction(
@@ -53,7 +55,9 @@ def compute_BSS_quantile_prediction(
     """
     one_hot_quantiles = _compute_one_hot_quantiles(x=targets, N=N)
 
-    return compute_BSS_clusters_target(vae=vae, inputs=inputs, targets_categorical=one_hot_quantiles)
+    return compute_BSS_clusters_target(
+        vae=vae, inputs=inputs, targets_categorical=one_hot_quantiles
+    )
 
 
 def compute_BSS_clusters_target(
@@ -86,11 +90,14 @@ def compute_BSS_clusters_target(
 
     targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
     forecast = _compute_probabilistic_forecast(
-        targets=targets_reshaped.astype(np.float32), cluster_probs=cluster_probs.astype(np.float32)
+        targets=targets_reshaped.astype(np.float32),
+        cluster_probs=cluster_probs.astype(np.float32),
     )
     baseline = targets_reshaped.mean(axis=0)
 
-    return _compute_brier_skill_score(y_true=targets_reshaped, y_prob=forecast, y_prob_ref=baseline)
+    return _compute_brier_skill_score(
+        y_true=targets_reshaped, y_prob=forecast, y_prob_ref=baseline
+    )
 
 
 def _compute_probabilistic_forecast(
@@ -112,7 +119,9 @@ def _compute_probabilistic_forecast(
     n_times, n_spatial, n_classes = targets.shape
     targets_flat = targets.reshape(n_times, -1)
 
-    conditional_probs = _compute_conditional_probabilities(targets_flat=targets_flat, cluster_probs=cluster_probs)
+    conditional_probs = _compute_conditional_probabilities(
+        targets_flat=targets_flat, cluster_probs=cluster_probs
+    )
 
     # (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
     forecast_flat = cluster_probs @ conditional_probs
@@ -186,7 +195,7 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
     From an array x, of shape (n0, .., np), compute the one-hot encoding of the
     quantile indices of x along its first axis, for N quantiles. The output is an array
     of shape (n0, .., np, N).
-    For example, if N=4, p=2, and x[0,0] is in the third quartile of the distribution of
+    For example, if N=4, p=1, and x[0,0] is in the third quartile of the distribution of
     x[:,0], then output[0,0] = [0, 0, 1, 0].
 
     :param x: Input array for which one-hot encoding of quantiles will be computed
