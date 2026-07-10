@@ -230,3 +230,4 @@ __marimo__/
 
 # Data folder
 data/
+experiments/trained_models
