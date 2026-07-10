@@ -17,8 +17,8 @@ def predict_clusters(
     :return: An array of cluster assignment probabilities for each time step, with shape
     (# times, vae.cfg.cluster_number)
     """
-    encoder_input = flatten_input(inputs)
-    encoder_output = vae.encode(encoder_input)
+    encoder_input = flatten_input(X=inputs)
+    encoder_output = vae.encode(input=encoder_input)
     cluster_probabilities = encoder_output["clusters_pred"]
 
     return cluster_probabilities
@@ -34,4 +34,4 @@ def calculate_cluster_centers(vae: VAEPredictor) -> np.ndarray:
         (vae.cfg.cluster_number, vae.cfg.original_dim))
     """
     mu = vae.get_mixture_components()["mu"][0]
-    return vae.decode(mu)["x_recon"]
+    return vae.decode(z=mu)["x_recon"]

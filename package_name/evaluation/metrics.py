@@ -29,7 +29,7 @@ def compute_BSS_quantile_exceedance(
     exceedance = (targets > target_quantile).astype(int)
     one_hot_exceedance = np.stack([1 - exceedance, exceedance], axis=-1)
 
-    return compute_BSS_clusters_target(vae, inputs, one_hot_exceedance)
+    return compute_BSS_clusters_target(vae=vae, inputs=inputs, targets_categorical=one_hot_exceedance)
 
 
 def compute_BSS_quantile_prediction(
@@ -51,9 +51,9 @@ def compute_BSS_quantile_prediction(
     :return: Brier skill score for the classification of the quantile indices of the
         target variable by the clusters.
     """
-    one_hot_quantiles = _compute_one_hot_quantiles(targets, N)
+    one_hot_quantiles = _compute_one_hot_quantiles(x=targets, N=N)
 
-    return compute_BSS_clusters_target(vae, inputs, one_hot_quantiles)
+    return compute_BSS_clusters_target(vae=vae, inputs=inputs, targets_categorical=one_hot_quantiles)
 
 
 def compute_BSS_clusters_target(
@@ -79,22 +79,18 @@ def compute_BSS_clusters_target(
     :return: Brier skill score for the classification of the target variable by the
              clusters.
     """
-    cluster_probs = predict_clusters(vae, inputs)
+    cluster_probs = predict_clusters(vae=vae, inputs=inputs)
 
     n_times = targets_categorical.shape[0]
     n_classes = targets_categorical.shape[-1]
 
     targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
     forecast = _compute_probabilistic_forecast(
-        targets_reshaped.astype(np.float32), cluster_probs.astype(np.float32)
+        targets=targets_reshaped.astype(np.float32), cluster_probs=cluster_probs.astype(np.float32)
     )
     baseline = targets_reshaped.mean(axis=0)
 
-    y_true = targets_reshaped
-    y_prob = forecast
-    y_prob_ref = baseline
-
-    return _compute_brier_skill_score(y_true, y_prob, y_prob_ref)
+    return _compute_brier_skill_score(y_true=targets_reshaped, y_prob=forecast, y_prob_ref=baseline)
 
 
 def _compute_probabilistic_forecast(
@@ -116,7 +112,7 @@ def _compute_probabilistic_forecast(
     n_times, n_spatial, n_classes = targets.shape
     targets_flat = targets.reshape(n_times, -1)
 
-    conditional_probs = _compute_conditional_probabilities(targets_flat, cluster_probs)
+    conditional_probs = _compute_conditional_probabilities(targets_flat=targets_flat, cluster_probs=cluster_probs)
 
     # (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
     forecast_flat = cluster_probs @ conditional_probs
@@ -179,8 +175,8 @@ def _compute_brier_skill_score(
         with shape (..., n_classes).
     :return: Brier skill score.
     """
-    brier_score_model = _compute_brier_score(y_true, y_prob)
-    brier_score_ref = _compute_brier_score(y_true, y_prob_ref)
+    brier_score_model = _compute_brier_score(y_true=y_true, y_prob=y_prob)
+    brier_score_ref = _compute_brier_score(y_true=y_true, y_prob=y_prob_ref)
 
     return 1.0 - (brier_score_model / brier_score_ref)
 
