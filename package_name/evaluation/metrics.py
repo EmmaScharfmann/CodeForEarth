@@ -9,10 +9,11 @@ def compute_BSS_quantile_exceedance(
 ) -> float:
     """
     Compute the Brier skill score for the classification of the exceedance of a quantile
-    threshold by a set of CMM-VAE clusters. For example, if 'targets' is a precipitation
-    field and q = 0.95, the score will measure how well the clusters predict the
-    exceedance of the 95th percentile of precipitation (the quantile is computed
-    separately for each grid point).
+    threshold by a set of CMM-VAE clusters. 
+    
+    For example, if 'targets' is a precipitation field and q = 0.95, the score will 
+    measure how well the clusters predict the exceedance of the 95th percentile of 
+    precipitation (the quantile is computed separately for each grid point).
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
@@ -33,10 +34,11 @@ def compute_BSS_quantile_prediction(
 ) -> float:
     """
     Compute the Brier skill score for the classification of the quantile indices of a
-    target variable by a set of CMM-VAE clusters. For example, if 'targets' is a
-    precipitation field and N = 4, the score will measure how well the clusters predict
-    the quartile of precipitation at each grid point (the quantiles are computed
-    separately for each grid point).
+    target variable by a set of CMM-VAE clusters. 
+    
+    For example, if 'targets' is a precipitation field and N = 4, the score will measure 
+    how well the clusters predict the quartile of precipitation at each grid point (the 
+    quantiles are computed separately for each grid point).
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
@@ -44,7 +46,7 @@ def compute_BSS_quantile_prediction(
     :param targets: The target data for all time steps. Shape (# times, ...)
     :param N: The number of quantiles to consider.
     :return: Brier skill score for the classification of the quantile indices of the
-             target variable by the clusters.
+        target variable by the clusters.
     """
     quantiles_one_hot = _compute_one_hot_quantiles(targets, N)
 
@@ -88,7 +90,7 @@ def compute_BSS_clusters_target(
     )
 
 
-def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
+def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> np.float32:
     """
     Compute the Brier score for multi-class classification.
 
@@ -96,7 +98,7 @@ def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     :param y_prob: Predicted probabilities for each class, with shape (None, n_classes).
     :return:       Brier score.
     """
-    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=1))
+    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=1)).astype(np.float32)
 
     return brier_score
 
@@ -119,7 +121,7 @@ def _compute_brier_skill_score(
     brier_score_model = _compute_brier_score(y_true, y_prob)
     brier_score_ref = _compute_brier_score(y_true, y_prob_ref)
 
-    return 1 - (brier_score_model / brier_score_ref)
+    return 1. - (brier_score_model / brier_score_ref)
 
 
 def _compute_mean_target_per_cluster(
@@ -158,46 +160,34 @@ def _compute_target_from_cluster(
     return mean_target_per_cluster[cluster_labels.astype(np.int32)]
 
 
-def _compute_quantile_indices(x: np.ndarray, N: int) -> np.ndarray:
-    """
-    From an array x, of shape (n0, .., np), compute the quantile indices of x along
-    its first axis, for N quantiles. The output is an array of shape (n0, .., np) with
-    values in {0, 1, ..., N-1}.
-    For example, if N=4 and x[0,0] is in the third quartile of the distribution of
-    x[:,0], then output[0,0] = 2.
-
-    :param x: Input array for which quantiles indices will be computed
-    :param N: Number of quantiles
-    :return: Quantile indices of x along its first axis.
-    """
-    original_shape = x.shape
-    n0 = original_shape[0]
-
-    x_reshaped = x.reshape(n0, -1)
-
-    quantiles = np.nanquantile(
-        x_reshaped, q=np.linspace(0, 1, N + 1)[1:], axis=0
-    )  # shape (N, n1*...*np)
-    quantiles = quantiles.T  # shape (n1*...*np, N)
-
-    quantile_indices = np.sum(
-        x_reshaped[..., np.newaxis] >= quantiles[np.newaxis, :], axis=-1
-    )  # shape (n0, n1*...*np)
-    return quantile_indices.reshape(*original_shape)
-
-
 def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
     """
     From an array x, of shape (n0, .., np), compute the one-hot encoding of the
     quantile indices of x along its first axis, for N quantiles. The output is an array
     of shape (n0, .., np, N).
-    For example, if N=4 and x[0,0] is in the third quartile of the distribution of
+    For example, if N=4, p=2, and x[0,0] is in the third quartile of the distribution of
     x[:,0], then output[0,0] = [0, 0, 1, 0].
 
     :param x: Input array for which one-hot encoding of quantiles will be computed
     :param N: Number of quantiles
     :return: One-hot encoding of the quantile indices of x along its first axis.
     """
-    quantile_indices = _compute_quantile_indices(x, N)
-    one_hot = (quantile_indices[..., None] == np.arange(N)).astype(int)
-    return one_hot
+    original_shape = x.shape
+    x_reshaped = x.reshape(original_shape[0], -1)
+
+    quantiles = np.nanquantile(
+        x_reshaped, q=np.linspace(0, 1, N + 1), axis=0
+    )  # shape (N, n1*...*np)
+
+    one_hot_quantiles = np.zeros((*x_reshaped.shape, N), dtype=np.int32)
+
+    for i in range(N-1):
+        one_hot_quantiles[..., i] = (x_reshaped >= quantiles[i, :]) & (
+            x_reshaped < quantiles[i + 1, :]
+        )
+
+    one_hot_quantiles[..., -1] = (x_reshaped >= quantiles[N - 1, :]) & (
+        x_reshaped <= quantiles[N, :]
+    )
+
+    return one_hot_quantiles.reshape(*original_shape, N)
