@@ -5,15 +5,16 @@ from package_name.evaluation.utils import predict_clusters
 
 EPS = 1e-12
 
+
 def compute_BSS_quantile_exceedance(
     vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, q: float
 ) -> float:
     """
     Compute the Brier skill score for the classification of the exceedance of a quantile
-    threshold by a set of CMM-VAE clusters. 
-    
-    For example, if 'targets' is a precipitation field and q = 0.95, the score will 
-    measure how well the clusters predict the exceedance of the 95th percentile of 
+    threshold by a set of CMM-VAE clusters.
+
+    For example, if 'targets' is a precipitation field and q = 0.95, the score will
+    measure how well the clusters predict the exceedance of the 95th percentile of
     precipitation (the quantile is computed separately for each grid point).
 
     :param vae: The CMM-VAE used to compute clusters
@@ -36,10 +37,10 @@ def compute_BSS_quantile_prediction(
 ) -> float:
     """
     Compute the Brier skill score for the classification of the quantile indices of a
-    target variable by a set of CMM-VAE clusters. 
-    
-    For example, if 'targets' is a precipitation field and N = 4, the score will measure 
-    how well the clusters predict the quartile of precipitation at each grid point (the 
+    target variable by a set of CMM-VAE clusters.
+
+    For example, if 'targets' is a precipitation field and N = 4, the score will measure
+    how well the clusters predict the quartile of precipitation at each grid point (the
     quantiles are computed separately for each grid point).
 
     :param vae: The CMM-VAE used to compute clusters
@@ -62,10 +63,10 @@ def compute_BSS_clusters_target(
     Compute the Brier skill score for the classification of a binary or categorical
     target variable by a set of CMM-VAE clusters.
 
-    This is done probabilistically: for each time step, the predicted cluster 
-    probabilities are combined with the conditional probabilities of the target variable 
-    given each cluster to produce a forecast of the target variable. The Brier skill 
-    score is then computed by comparing the Brier score of the forecast to that of the 
+    This is done probabilistically: for each time step, the predicted cluster
+    probabilities are combined with the conditional probabilities of the target variable
+    given each cluster to produce a forecast of the target variable. The Brier skill
+    score is then computed by comparing the Brier score of the forecast to that of the
     climatological baseline.
 
     :param vae: The CMM-VAE used to compute clusters
@@ -84,31 +85,28 @@ def compute_BSS_clusters_target(
     n_classes = targets_categorical.shape[-1]
 
     targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
-
-    forecast = _compute_probabilistic_forecast(targets_reshaped.astype(np.float32), cluster_probs.astype(np.float32))
-
+    forecast = _compute_probabilistic_forecast(
+        targets_reshaped.astype(np.float32), cluster_probs.astype(np.float32)
+    )
     baseline = targets_reshaped.mean(axis=0)
-    # baseline_broadcasted = np.broadcast_to(baseline, targets_reshaped.shape)
 
-    # y_true = targets_reshaped.reshape(-1, n_classes)
-    # y_prob = forecast.reshape(-1, n_classes)
-    # y_prob_ref = baseline_broadcasted.reshape(-1, n_classes)
     y_true = targets_reshaped
     y_prob = forecast
     y_prob_ref = baseline
 
     return _compute_brier_skill_score(y_true, y_prob, y_prob_ref)
 
+
 def _compute_probabilistic_forecast(
     targets: np.ndarray, cluster_probs: np.ndarray
 ) -> np.ndarray:
     """
-    Compute target probabilities across space and classes by combining the predicted 
-    cluster probabilities with the conditional probabilities of the target variable 
-    given each cluster. This uses the law of total probability, i.e., 
+    Compute target probabilities across space and classes by combining the predicted
+    cluster probabilities with the conditional probabilities of the target variable
+    given each cluster. This uses the law of total probability, i.e.,
     P(target) = sum_c P(target | cluster=c) * P(cluster=c).
 
-    :param targets: The target data for all time steps. Must be a one-hot encoding of 
+    :param targets: The target data for all time steps. Must be a one-hot encoding of
     target classes, with shape (n_times, n_spatial, n_classes).
     :param cluster_probs: The predicted cluster probabilities for all time steps, with
     shape (n_times, n_clusters).
@@ -118,9 +116,7 @@ def _compute_probabilistic_forecast(
     n_times, n_spatial, n_classes = targets.shape
     targets_flat = targets.reshape(n_times, -1)
 
-    conditional_probs = _compute_conditional_probabilities(
-        targets_flat, cluster_probs
-    )
+    conditional_probs = _compute_conditional_probabilities(targets_flat, cluster_probs)
 
     # (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
     forecast_flat = cluster_probs @ conditional_probs
@@ -133,12 +129,12 @@ def _compute_conditional_probabilities(
 ) -> np.ndarray:
     """
     Apply Bayes' theorem to calculate the conditional target probabilities given a
-    cluster assignment. This calculates the term 
+    cluster assignment. This calculates the term
     P(target=t | cluster=c) = P(cluster=c and target=t)/ P(cluster=c)
 
-    To calculate P(cluster=c and target=t), we simpy calculate the average of 
+    To calculate P(cluster=c and target=t), we simpy calculate the average of
     P(cluster=c) on days when target=t. This is what the first line of the function does,
-    leveraging the fact that the targets are one-hot encoded. 
+    leveraging the fact that the targets are one-hot encoded.
 
     :param targets_flat: The target data for all time steps, flattened across all
         spatial dimensions. Must be a one-hot encoding of target classes, with shape
@@ -156,18 +152,18 @@ def _compute_conditional_probabilities(
     return joint_weights / np.maximum(mean_cluster_probs, EPS)
 
 
-def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> np.float32:
+def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     """
     Compute the Brier score for multi-class classification.
 
-    :param y_true: True labels (one-hot encoded), with shape (n_samples, n_classes).
-    :param y_prob: Predicted probabilities for each class, with shape (n_samples, n_classes).
+    :param y_true: True labels (one-hot encoded), with shape (..., n_classes).
+    :param y_prob: Predicted probabilities for each class, with shape (..., n_classes).
     :return:       Brier score.
     """
-    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=-1)).astype(np.float32)
+    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=-1))
 
     return brier_score
-    
+
 
 def _compute_brier_skill_score(
     y_true: np.ndarray, y_prob: np.ndarray, y_prob_ref: np.ndarray
@@ -177,17 +173,16 @@ def _compute_brier_skill_score(
     0 means the performance is the same as the reference model, 1 means perfect
     performance, and negative values mean worse than the reference model.
 
-    :param y_true: True labels (one-hot encoded), with shape (n_samples, n_classes).
-    :param y_prob: Predicted probabilities for each class, with shape (n_samples,
-        n_classes).
+    :param y_true: True labels (one-hot encoded), with shape (..., n_classes).
+    :param y_prob: Predicted probabilities for each class, with shape (..., n_classes).
     :param y_prob_ref: Predicted probabilities from a reference model for each class,
-        with shape (n_samples, n_classes).
+        with shape (..., n_classes).
     :return: Brier skill score.
     """
     brier_score_model = _compute_brier_score(y_true, y_prob)
     brier_score_ref = _compute_brier_score(y_true, y_prob_ref)
 
-    return 1. - (brier_score_model / brier_score_ref)
+    return 1.0 - (brier_score_model / brier_score_ref)
 
 
 def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
@@ -211,7 +206,7 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
 
     one_hot_quantiles = np.zeros((*x_reshaped.shape, N), dtype=np.int32)
 
-    for i in range(N-1):
+    for i in range(N - 1):
         one_hot_quantiles[..., i] = (x_reshaped >= quantiles[i, :]) & (
             x_reshaped < quantiles[i + 1, :]
         )

@@ -9,12 +9,12 @@ def predict_clusters(
     inputs: np.ndarray,
 ) -> np.ndarray:
     """
-    From a set of input data (e.g., Z500), calculate cluster assignment probabilities 
+    From a set of input data (e.g., Z500), calculate cluster assignment probabilities
     for each time step using a CMM-VAE.
 
     :param inputs: Input data to be labeled, with shape (# times, # latitudes, # longitudes)
     :param vae: The CMM-VAE used to predict cluster assigments
-    :return: An array of cluster assignment probabilities for each time step, with shape 
+    :return: An array of cluster assignment probabilities for each time step, with shape
     (# times, vae.cfg.cluster_number)
     """
     encoder_input = flatten_input(inputs)
