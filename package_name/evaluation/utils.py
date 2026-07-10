@@ -9,20 +9,19 @@ def predict_clusters(
     inputs: np.ndarray,
 ) -> np.ndarray:
     """
-    Label a set of input data (e.g., Z500) using the most probable cluster predicted by
-    a CMM-VAE.
+    From a set of input data (e.g., Z500), calculate cluster assignment probabilities 
+    for each time step using a CMM-VAE.
 
     :param inputs: Input data to be labeled, with shape (# times, # latitudes, # longitudes)
     :param vae: The CMM-VAE used to predict cluster assigments
-    :return: An array of cluster labels for each time step, with shape (# times) and
-        values in {0, 1, ..., vae.cfg.cluster_number-1}
+    :return: An array of cluster assignment probabilities for each time step, with shape 
+    (# times, vae.cfg.cluster_number)
     """
     encoder_input = flatten_input(inputs)
     encoder_output = vae.encode(encoder_input)
     cluster_probabilities = encoder_output["clusters_pred"]
-    most_probable_clusters = np.argmax(cluster_probabilities, axis=1)
 
-    return most_probable_clusters
+    return cluster_probabilities
 
 
 def calculate_cluster_centers(vae: VAEPredictor) -> np.ndarray:
