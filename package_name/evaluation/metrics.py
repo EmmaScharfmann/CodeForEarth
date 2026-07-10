@@ -85,14 +85,17 @@ def compute_BSS_clusters_target(
 
     targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
 
-    forecast = _compute_probabilistic_forecast(targets_reshaped, cluster_probs)
+    forecast = _compute_probabilistic_forecast(targets_reshaped.astype(np.float32), cluster_probs.astype(np.float32))
 
     baseline = targets_reshaped.mean(axis=0)
-    baseline_broadcasted = np.broadcast_to(baseline, targets_reshaped.shape)
+    # baseline_broadcasted = np.broadcast_to(baseline, targets_reshaped.shape)
 
-    y_true = targets_reshaped.reshape(-1, n_classes)
-    y_prob = forecast.reshape(-1, n_classes)
-    y_prob_ref = baseline_broadcasted.reshape(-1, n_classes)
+    # y_true = targets_reshaped.reshape(-1, n_classes)
+    # y_prob = forecast.reshape(-1, n_classes)
+    # y_prob_ref = baseline_broadcasted.reshape(-1, n_classes)
+    y_true = targets_reshaped
+    y_prob = forecast
+    y_prob_ref = baseline
 
     return _compute_brier_skill_score(y_true, y_prob, y_prob_ref)
 
@@ -161,7 +164,7 @@ def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> np.float32:
     :param y_prob: Predicted probabilities for each class, with shape (n_samples, n_classes).
     :return:       Brier score.
     """
-    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=1)).astype(np.float32)
+    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=-1)).astype(np.float32)
 
     return brier_score
     

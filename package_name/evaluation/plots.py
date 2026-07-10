@@ -222,7 +222,8 @@ def plot_reordered_centers_and_odds_ratio(
         target variable within each cluster.
     """
 
-    cluster_labels = predict_clusters(vae, inputs.values)
+    cluster_probabilities = predict_clusters(vae, inputs.values)
+    cluster_labels = np.argmax(cluster_probabilities, axis=1)
     inputs_with_label = inputs.assign_coords(cluster=("time", cluster_labels))
     target_binary_with_label = target_binary.assign_coords(
         cluster=("time", cluster_labels)
