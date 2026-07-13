@@ -5,7 +5,7 @@ from package_name.constants import EPSILON
 
 
 def compute_BSS_quantile_exceedance(
-    vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, q: float
+    vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, q: float, larger_than: bool = True
 ) -> float:
     """
     Compute the Brier skill score for the classification of the exceedance of a quantile
@@ -20,11 +20,14 @@ def compute_BSS_quantile_exceedance(
         # latitudes, # longitudes)
     :param targets: The target data for all time steps. Shape (# times, ...)
     :param q: The quantile threshold, between 0 and 1.
+    :param larger_than: If True, the exceedance is defined as targets > quantile. If
+        False, the exceedance is defined as targets < quantile.
     :return: Brier skill score for the classification of the exceedance of the
         quantile threshold by the clusters.
     """
     target_quantile = np.nanquantile(targets, q=q, axis=0)
-    exceedance = (targets > target_quantile).astype(int)
+    exceedance = targets > target_quantile if larger_than else targets < target_quantile
+    exceedance = exceedance.astype(int)
     one_hot_exceedance = np.stack([1 - exceedance, exceedance], axis=-1)
 
     return compute_BSS_clusters_target(
