@@ -105,9 +105,9 @@ def plot_cluster_centers(
     :return: A matplotlib figure object containing the plots.
     """
     ny, nx = len(input_sample.latitude), len(input_sample.longitude)
-    cluster_centers = calculate_cluster_centers(vae)
+    cluster_centers = calculate_cluster_centers(vae=vae)
 
-    cluster_centers = unflatten_input(cluster_centers, ny, nx)
+    cluster_centers = unflatten_input(X=cluster_centers, ny=ny, nx=nx)
     cluster_centers = xr.DataArray(
         cluster_centers,
         coords=[
@@ -119,9 +119,9 @@ def plot_cluster_centers(
     )
     titles = [f"Cluster {i}" for i in range(vae.cfg.cluster_number)]
     return _plot_set_of_maps(
-        cluster_centers,
-        titles,
-        "True cluster centers (calculated by decoding mixture components)",
+        data=cluster_centers,
+        titles=titles,
+        suptitle="True cluster centers (calculated by decoding mixture components)",
         plot_reordering=plot_reordering,
         **kwargs,
     )
@@ -155,9 +155,9 @@ def plot_empirical_cluster_centers(
     ]
 
     return _plot_set_of_maps(
-        cluster_centers,
-        titles,
-        "Empirical cluster centers",
+        data=cluster_centers,
+        titles=titles,
+        suptitle="Empirical cluster centers",
         plot_reordering=plot_reordering,
         **kwargs,
     )
@@ -195,9 +195,9 @@ def plot_spatial_odds_ratio(
     titles = [f"Cluster {i}" for i in range(cluster_number)]
 
     return _plot_set_of_maps(
-        odds_ratio,
-        titles,
-        "Odds ratio of target variable within each cluster",
+        data=odds_ratio,
+        titles=titles,
+        suptitle="Odds ratio of target variable within each cluster",
         plot_reordering=plot_reordering,
         levels=levels,
         **kwargs,
@@ -222,8 +222,8 @@ def plot_reordered_centers_and_odds_ratio(
         target variable within each cluster.
     """
 
-    
-    cluster_labels = predict_clusters(vae, inputs.values)
+    cluster_probabilities = predict_clusters(vae=vae, inputs=inputs.values)
+    cluster_labels = np.argmax(cluster_probabilities, axis=1)
     inputs_with_label = inputs.assign_coords(cluster=("time", cluster_labels))
     # target_binary_with_label = target_binary.assign_coords(
     #     cluster=("time", cluster_labels)
@@ -238,13 +238,13 @@ def plot_reordered_centers_and_odds_ratio(
     label_reordering=None
 
     fig_cluster_centers = plot_cluster_centers(
-        vae,
-        inputs[0],
+        vae=vae,
+        input_sample=inputs[0],
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )
     fig_empirical_cluster_centers = plot_empirical_cluster_centers(
-        inputs_with_label,
+        input_with_labels=inputs_with_label,
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )

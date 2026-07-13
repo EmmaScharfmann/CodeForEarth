@@ -14,7 +14,7 @@ from package_name.model.utils import (
     GaussianDistribution,
 )
 
-_EPSILON = tf.keras.backend.epsilon()
+from package_name.constants import EPSILON
 
 
 class VAELoss:
@@ -105,7 +105,7 @@ class VAELoss:
         # Dirichlet prior term: regularized mixture weights to avoid vanishing clusters
         dirichlet_loss = tf.reduce_sum(
             -self.loss_factors.dirichlet_loss_factor
-            * tf.math.log(tf.maximum(mixture_output.pi, _EPSILON)),
+            * tf.math.log(tf.maximum(mixture_output.pi, EPSILON)),
             axis=-1,
         )
 
@@ -159,7 +159,7 @@ def _calculate_gaussian_kl_divergence(
 
 def _calculate_categorical_kl_divergence(p: Tensor, q: Tensor) -> Tensor:
     """Calculate the KL divergence between the two given categorical distributions."""
-    log_p = tf.math.log(tf.maximum(p, _EPSILON))
-    log_q = tf.math.log(tf.maximum(q, _EPSILON))
+    log_p = tf.math.log(tf.maximum(p, EPSILON))
+    log_q = tf.math.log(tf.maximum(q, EPSILON))
 
     return tf.reduce_sum(p * (log_p - log_q), axis=-1)
