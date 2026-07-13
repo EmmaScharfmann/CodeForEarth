@@ -206,7 +206,7 @@ def plot_spatial_odds_ratio(
 
 def plot_reordered_centers_and_odds_ratio(
     vae: VAEPredictor, inputs: xr.DataArray, target_binary: xr.DataArray
-) -> tuple[plt.Figure, plt.Figure]:#, plt.Figure]:
+) -> tuple[plt.Figure, plt.Figure, plt.Figure]:
     """
     Plot a summary of the CMM-VAE clusters characteristics: centers (both empirical and
     decoded) and odds ratio of a binary target.
@@ -225,17 +225,16 @@ def plot_reordered_centers_and_odds_ratio(
     cluster_probabilities = predict_clusters(vae=vae, inputs=inputs.values)
     cluster_labels = np.argmax(cluster_probabilities, axis=1)
     inputs_with_label = inputs.assign_coords(cluster=("time", cluster_labels))
-    # target_binary_with_label = target_binary.assign_coords(
-    #     cluster=("time", cluster_labels)
-    # )
+    target_binary_with_label = target_binary.assign_coords(
+        cluster=("time", cluster_labels)
+    )
 
-    # target_global_mean_by_cluster = (
-    #     target_binary_with_label.mean(("latitude", "longitude"))
-    #     .groupby("cluster")
-    #     .mean()
-    # )
-    # label_reordering = target_global_mean_by_cluster.argsort().values
-    label_reordering=None
+    target_global_mean_by_cluster = (
+        target_binary_with_label.mean(("latitude", "longitude"))
+        .groupby("cluster")
+        .mean()
+    )
+    label_reordering = target_global_mean_by_cluster.argsort().values
 
     fig_cluster_centers = plot_cluster_centers(
         vae=vae,
@@ -248,10 +247,10 @@ def plot_reordered_centers_and_odds_ratio(
         plot_reordering=label_reordering,
         levels=np.arange(-2.0, 2.1, 0.25),
     )
-    # fig_odds_ratio = plot_spatial_odds_ratio(
-    #     target_binary_with_label,
-    #     plot_reordering=label_reordering,
-    #     cmap="PuOr",
-    #     extend="both",
-    # )
-    return fig_cluster_centers, fig_empirical_cluster_centers#, fig_odds_ratio
+    fig_odds_ratio = plot_spatial_odds_ratio(
+        target_binary_with_labels=target_binary_with_label,
+        plot_reordering=label_reordering,
+        cmap="PuOr",
+        extend="both",
+    )
+    return fig_cluster_centers, fig_empirical_cluster_centers, fig_odds_ratio
