@@ -22,6 +22,26 @@ class PCAKmeansInfo:
 
 
 class PCAKmeansTrainer:
+    """
+    Trainer for the baseline model PCA + Kmeans.
+
+    Attributes
+    ----------
+    n_clusters : int
+        Number of clusters for K-means.
+    n_components : int | None. Default None.
+        Optional: Number of principal components. If None, uses min(n_samples, n_features)
+    random_state : int
+        Random seed for reproducibility. Default=42
+    model_dir : str
+        Directory path where models will be saved. Default: "./results/"
+
+    Methods
+    -------
+    cluster():
+        Perform PCA followed by K-means clustering with probability outputs.
+    """
+
     def __init__(
         self,
         n_clusters: int,
@@ -106,6 +126,24 @@ class PCAKmeansTrainer:
 
 
 class PCAKmeansPredictor:
+    """
+    Predictor for the baseline model PCA + Kmeans.
+
+    Attributes
+    ----------
+    model_dir : str
+        Directory path where models will be saved. Default: "./results/"
+    model : PCAKmeansModels
+        The models (scaler, PCA, Kmeans) loaded from the directory.
+
+    Methods
+    -------
+    load_models():
+        Load trained PCA, K-means, and Scaler models from self.model_dir.
+    cluster():
+        Predict cluster assignments and probabilities using the self.model.
+    """
+
     def __init__(
         self,
         model_dir: str = "./results/",
@@ -115,7 +153,7 @@ class PCAKmeansPredictor:
 
     def load_models(self) -> PCAKmeansModels:
         """
-        Load trained PCA, K-means, and Scaler models from disk.
+        Load trained PCA, K-means, and Scaler models.
 
         :return:                Object with loaded models
         """
