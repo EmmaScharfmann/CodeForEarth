@@ -2,6 +2,7 @@ import numpy as np
 import xarray as xr
 from package_name.inference.predictor import VAEPredictor
 from package_name.evaluation.utils import predict_clusters
+from package_name.constants import EPSILON
 
 
 def compute_BSS_quantile_exceedance(
@@ -9,10 +10,11 @@ def compute_BSS_quantile_exceedance(
 ) -> float:
     """
     Compute the Brier skill score for the classification of the exceedance of a quantile
-    threshold by a set of CMM-VAE clusters. For example, if 'targets' is a precipitation
-    field and q = 0.95, the score will measure how well the clusters predict the
-    exceedance of the 95th percentile of precipitation (the quantile is computed
-    separately for each grid point).
+    threshold by a set of CMM-VAE clusters.
+
+    For example, if 'targets' is a precipitation field and q = 0.95, the score will
+    measure how well the clusters predict the exceedance of the 95th percentile of
+    precipitation (the quantile is computed separately for each grid point).
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
@@ -23,9 +25,12 @@ def compute_BSS_quantile_exceedance(
         quantile threshold by the clusters.
     """
     target_quantile = np.nanquantile(targets, q=q, axis=0)
-    target_quantile_exceedance = (targets > target_quantile).astype(int)
+    exceedance = (targets > target_quantile).astype(int)
+    one_hot_exceedance = np.stack([1 - exceedance, exceedance], axis=-1)
 
-    return compute_BSS_clusters_target(vae, inputs, target_quantile_exceedance)
+    return compute_BSS_clusters_target(
+        vae=vae, inputs=inputs, targets_categorical=one_hot_exceedance
+    )
 
 
 def compute_BSS_quantile_prediction(
@@ -33,10 +38,11 @@ def compute_BSS_quantile_prediction(
 ) -> float:
     """
     Compute the Brier skill score for the classification of the quantile indices of a
-    target variable by a set of CMM-VAE clusters. For example, if 'targets' is a
-    precipitation field and N = 4, the score will measure how well the clusters predict
-    the quartile of precipitation at each grid point (the quantiles are computed
-    separately for each grid point).
+    target variable by a set of CMM-VAE clusters.
+
+    For example, if 'targets' is a precipitation field and N = 4, the score will measure
+    how well the clusters predict the quartile of precipitation at each grid point (the
+    quantiles are computed separately for each grid point).
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
@@ -44,11 +50,13 @@ def compute_BSS_quantile_prediction(
     :param targets: The target data for all time steps. Shape (# times, ...)
     :param N: The number of quantiles to consider.
     :return: Brier skill score for the classification of the quantile indices of the
-             target variable by the clusters.
+        target variable by the clusters.
     """
-    quantiles_one_hot = _compute_one_hot_quantiles(targets, N)
+    one_hot_quantiles = _compute_one_hot_quantiles(x=targets, N=N)
 
-    return compute_BSS_clusters_target(vae, inputs, quantiles_one_hot)
+    return compute_BSS_clusters_target(
+        vae=vae, inputs=inputs, targets_categorical=one_hot_quantiles
+    )
 
 
 def compute_BSS_clusters_target(
@@ -57,6 +65,12 @@ def compute_BSS_clusters_target(
     """
     Compute the Brier skill score for the classification of a binary or categorical
     target variable by a set of CMM-VAE clusters.
+
+    This is done probabilistically: for each time step, the predicted cluster
+    probabilities are combined with the conditional probabilities of the target variable
+    given each cluster to produce a forecast of the target variable. The Brier skill
+    score is then computed by comparing the Brier score of the forecast to that of the
+    climatological baseline.
 
     :param vae: The CMM-VAE used to compute clusters
     :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
@@ -68,37 +82,88 @@ def compute_BSS_clusters_target(
     :return: Brier skill score for the classification of the target variable by the
              clusters.
     """
-    cluster_labels = predict_clusters(vae, inputs)
+    cluster_probs = predict_clusters(vae=vae, inputs=inputs)
 
     n_times = targets_categorical.shape[0]
     n_classes = targets_categorical.shape[-1]
 
-    targets_categorical = targets_categorical.reshape(n_times, -1, n_classes)
-    # Get the mean target for each cluster, and assign it to all time steps that fall in that cluster
-    targets_categorical_from_clusters = _compute_target_from_cluster(
-        targets_categorical, cluster_labels
+    targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
+    forecast = _compute_probabilistic_forecast(
+        targets=targets_reshaped.astype(np.float32),
+        cluster_probs=cluster_probs.astype(np.float32),
     )
-    # Baseline target is the mean target over all time steps, which is used as a reference for the Brier skill score
-    baseline = targets_categorical.mean(axis=0)
+    baseline = targets_reshaped.mean(axis=0)
 
     return _compute_brier_skill_score(
-        targets_categorical,
-        targets_categorical_from_clusters,
-        baseline,
+        y_true=targets_reshaped, y_prob=forecast, y_prob_ref=baseline
     )
+
+
+def _compute_probabilistic_forecast(
+    targets: np.ndarray, cluster_probs: np.ndarray
+) -> np.ndarray:
+    """
+    Compute target probabilities across space and classes by combining the predicted
+    cluster probabilities with the conditional probabilities of the target variable
+    given each cluster. This uses the law of total probability, i.e.,
+    P(target) = sum_c P(target | cluster=c) * P(cluster=c).
+
+    :param targets: The target data for all time steps. Must be a one-hot encoding of
+    target classes, with shape (n_times, n_spatial, n_classes).
+    :param cluster_probs: The predicted cluster probabilities for all time steps, with
+    shape (n_times, n_clusters).
+    :return: The forecasted target probabilities for all time steps, with shape
+    (n_times, n_spatial, n_classes).
+    """
+    n_times, n_spatial, n_classes = targets.shape
+    targets_flat = targets.reshape(n_times, -1)
+
+    conditional_probs = _compute_conditional_probabilities(
+        targets_flat=targets_flat, cluster_probs=cluster_probs
+    )
+
+    # (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
+    forecast_flat = cluster_probs @ conditional_probs
+
+    return forecast_flat.reshape(n_times, n_spatial, n_classes)
+
+
+def _compute_conditional_probabilities(
+    targets_flat: np.ndarray, cluster_probs: np.ndarray
+) -> np.ndarray:
+    """
+    Apply Bayes' theorem to calculate the conditional target probabilities given a
+    cluster assignment. This calculates the term
+    P(target=t | cluster=c) = P(cluster=c and target=t)/ P(cluster=c)
+
+    To calculate P(cluster=c and target=t), we simpy calculate the average of
+    P(cluster=c) on days when target=t. This is what the first line of the function does,
+    leveraging the fact that the targets are one-hot encoded.
+
+    :param targets_flat: The target data for all time steps, flattened across all
+        spatial dimensions. Must be a one-hot encoding of target classes, with shape
+        (n_times, n_spatial * n_classes).
+    :param cluster_probs: The predicted cluster probabilities for all time steps, with
+        shape (n_times, n_clusters).
+    :return: The conditional target probabilities given each cluster, with shape
+        (n_clusters, n_spatial * n_classes).
+
+    """
+    joint_weights = cluster_probs.T @ targets_flat / targets_flat.shape[0]
+    mean_cluster_probs = cluster_probs.mean(axis=0)[:, np.newaxis]
+
+    return joint_weights / np.maximum(mean_cluster_probs, EPSILON)
 
 
 def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     """
     Compute the Brier score for multi-class classification.
 
-    :param y_true: True labels (one-hot encoded), with shape (n_samples, n_classes).
-    :param y_prob: Predicted probabilities for each class, with shape (None, n_classes).
+    :param y_true: True labels (one-hot encoded), with shape (..., n_classes).
+    :param y_prob: Predicted probabilities for each class, with shape (..., n_classes).
     :return:       Brier score.
     """
-    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=1))
-
-    return brier_score
+    return np.mean(np.sum((y_prob - y_true) ** 2, axis=-1))
 
 
 def _compute_brier_skill_score(
@@ -109,81 +174,16 @@ def _compute_brier_skill_score(
     0 means the performance is the same as the reference model, 1 means perfect
     performance, and negative values mean worse than the reference model.
 
-    :param y_true: True labels (one-hot encoded), with shape (n_samples, n_classes).
-    :param y_prob: Predicted probabilities for each class, with shape (n_samples,
-        n_classes).
+    :param y_true: True labels (one-hot encoded), with shape (..., n_classes).
+    :param y_prob: Predicted probabilities for each class, with shape (..., n_classes).
     :param y_prob_ref: Predicted probabilities from a reference model for each class,
-        with shape (None, n_classes).
+        with shape (..., n_classes).
     :return: Brier skill score.
     """
-    brier_score_model = _compute_brier_score(y_true, y_prob)
-    brier_score_ref = _compute_brier_score(y_true, y_prob_ref)
+    brier_score_model = _compute_brier_score(y_true=y_true, y_prob=y_prob)
+    brier_score_ref = _compute_brier_score(y_true=y_true, y_prob=y_prob_ref)
 
-    return 1 - (brier_score_model / brier_score_ref)
-
-
-def _compute_mean_target_per_cluster(
-    targets: np.ndarray, cluster_labels: np.ndarray
-) -> np.ndarray:
-    """
-    For an array of targets and an array of cluster labels, compute the mean
-    target for each cluster. Uses xarray groupby.
-
-    :param targets: An array of shape (n_samples, ...) containing target data (usually
-        binary or categorical)
-    :param cluster_labels: An array of shape (n_samples,) containing the cluster labels
-    :return: An array of shape (n_clusters, ...) containing the mean target for each
-        cluster
-    """
-    n_dims = len(targets.shape)
-    targets_xr = xr.DataArray(targets, dims=[f"dim{i}" for i in range(n_dims)])
-    targets_xr = targets_xr.assign_coords(cluster=("dim0", cluster_labels))
-    return targets_xr.groupby("cluster").mean().values
-
-
-def _compute_target_from_cluster(
-    targets: np.ndarray, cluster_labels: np.ndarray
-) -> np.ndarray:
-    """
-    For an array of targets and an array of cluster labels, compute the mean
-    target for each cluster and assign it to all the samples that fall in that cluster.
-
-    :param targets: An array of shape (n_samples, ...) containing target data (usually
-        binary or categorical)
-    :param cluster_labels: An array of shape (n_samples,) containing the cluster labels
-    :return: An array of shape (n_samples, ...) containing the targets assigned to each
-        sample based on its cluster label
-    """
-    mean_target_per_cluster = _compute_mean_target_per_cluster(targets, cluster_labels)
-    return mean_target_per_cluster[cluster_labels.astype(np.int32)]
-
-
-def _compute_quantile_indices(x: np.ndarray, N: int) -> np.ndarray:
-    """
-    From an array x, of shape (n0, .., np), compute the quantile indices of x along
-    its first axis, for N quantiles. The output is an array of shape (n0, .., np) with
-    values in {0, 1, ..., N-1}.
-    For example, if N=4 and x[0,0] is in the third quartile of the distribution of
-    x[:,0], then output[0,0] = 2.
-
-    :param x: Input array for which quantiles indices will be computed
-    :param N: Number of quantiles
-    :return: Quantile indices of x along its first axis.
-    """
-    original_shape = x.shape
-    n0 = original_shape[0]
-
-    x_reshaped = x.reshape(n0, -1)
-
-    quantiles = np.nanquantile(
-        x_reshaped, q=np.linspace(0, 1, N + 1)[1:], axis=0
-    )  # shape (N, n1*...*np)
-    quantiles = quantiles.T  # shape (n1*...*np, N)
-
-    quantile_indices = np.sum(
-        x_reshaped[..., np.newaxis] >= quantiles[np.newaxis, :], axis=-1
-    )  # shape (n0, n1*...*np)
-    return quantile_indices.reshape(*original_shape)
+    return 1.0 - (brier_score_model / brier_score_ref)
 
 
 def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
@@ -191,13 +191,30 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
     From an array x, of shape (n0, .., np), compute the one-hot encoding of the
     quantile indices of x along its first axis, for N quantiles. The output is an array
     of shape (n0, .., np, N).
-    For example, if N=4 and x[0,0] is in the third quartile of the distribution of
+    For example, if N=4, p=1, and x[0,0] is in the third quartile of the distribution of
     x[:,0], then output[0,0] = [0, 0, 1, 0].
 
     :param x: Input array for which one-hot encoding of quantiles will be computed
     :param N: Number of quantiles
     :return: One-hot encoding of the quantile indices of x along its first axis.
     """
-    quantile_indices = _compute_quantile_indices(x, N)
-    one_hot = (quantile_indices[..., None] == np.arange(N)).astype(int)
-    return one_hot
+    original_shape = x.shape
+    x_reshaped = x.reshape(original_shape[0], -1)
+
+    quantiles = np.nanquantile(
+        x_reshaped, q=np.linspace(0, 1, N + 1), axis=0
+    )  # shape (N, n1*...*np)
+
+    one_hot_quantiles = np.zeros((*x_reshaped.shape, N), dtype=np.int32)
+
+    for i in range(N):
+        x_larger_than_qi = x_reshaped >= quantiles[i, :]
+        x_smaller_than_qi1 = (
+            x_reshaped < quantiles[i + 1, :]
+            if i < N - 1
+            else x_reshaped <= quantiles[i + 1, :]
+        )  # We use <= for the last quantile to include the maximum value in the last bin
+
+        one_hot_quantiles[..., i] = x_larger_than_qi & x_smaller_than_qi1
+
+    return one_hot_quantiles.reshape(*original_shape, N)
