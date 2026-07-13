@@ -2,8 +2,7 @@ import numpy as np
 import xarray as xr
 from package_name.inference.predictor import VAEPredictor
 from package_name.evaluation.utils import predict_clusters
-
-EPS = 1e-12
+from package_name.constants import EPSILON
 
 
 def compute_BSS_quantile_exceedance(
@@ -153,8 +152,7 @@ def _compute_conditional_probabilities(
     joint_weights = cluster_probs.T @ targets_flat / targets_flat.shape[0]
     mean_cluster_probs = cluster_probs.mean(axis=0)[:, np.newaxis]
 
-    # We use EPS to avoid division by zero
-    return joint_weights / np.maximum(mean_cluster_probs, EPS)
+    return joint_weights / np.maximum(mean_cluster_probs, EPSILON)
 
 
 def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
@@ -165,9 +163,7 @@ def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     :param y_prob: Predicted probabilities for each class, with shape (..., n_classes).
     :return:       Brier score.
     """
-    brier_score = np.mean(np.sum((y_prob - y_true) ** 2, axis=-1))
-
-    return brier_score
+    return np.mean(np.sum((y_prob - y_true) ** 2, axis=-1))
 
 
 def _compute_brier_skill_score(
@@ -211,13 +207,14 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
 
     one_hot_quantiles = np.zeros((*x_reshaped.shape, N), dtype=np.int32)
 
-    for i in range(N - 1):
-        one_hot_quantiles[..., i] = (x_reshaped >= quantiles[i, :]) & (
+    for i in range(N):
+        x_larger_than_qi = x_reshaped >= quantiles[i, :]
+        x_smaller_than_qi1 = (
             x_reshaped < quantiles[i + 1, :]
-        )
+            if i < N - 1
+            else x_reshaped <= quantiles[i + 1, :]
+        )  # We use <= for the last quantile to include the maximum value in the last bin
 
-    one_hot_quantiles[..., -1] = (x_reshaped >= quantiles[N - 1, :]) & (
-        x_reshaped <= quantiles[N, :]
-    )
+        one_hot_quantiles[..., i] = x_larger_than_qi & x_smaller_than_qi1
 
     return one_hot_quantiles.reshape(*original_shape, N)
