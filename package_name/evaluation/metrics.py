@@ -1,5 +1,4 @@
 import numpy as np
-import xarray as xr
 from package_name.inference.predictor import VAEPredictor
 from package_name.evaluation.utils import predict_clusters
 from package_name.constants import EPSILON
