@@ -217,3 +217,123 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
         one_hot_quantiles[..., i] = x_larger_than_qi & x_smaller_than_qi1
 
     return one_hot_quantiles.reshape(*original_shape, N)
+
+def calculate_cluster_brier_skill_score(
+    y_true_labels: np.ndarray,
+    y_forecast_prob: np.ndarray,
+    n_classes: int | None = None,
+) -> tuple[float, float, float]:
+    """
+    Calculate forecast Brier score, climatological Brier score,
+    and Brier skill score.
+
+    Parameters
+    ----------
+    y_true_labels
+        Observed integer cluster labels with shape ``(n_samples,)``.
+    y_forecast_prob
+        Forecast probabilities with shape
+        ``(n_samples, n_classes)``.
+    n_classes
+        Number of clusters. Inferred from y_forecast_prob when omitted.
+
+    Returns
+    -------
+    bs_forecast
+        Brier score of the forecast.
+    bs_climatology
+        Brier score of the climatological forecast.
+    bss
+        Brier skill score relative to climatology.
+    """
+    y_true_labels = np.asarray(
+        y_true_labels,
+        dtype=int,
+    ).reshape(-1)
+
+    y_forecast_prob = np.asarray(
+        y_forecast_prob,
+        dtype=float,
+    )
+
+    if y_forecast_prob.ndim != 2:
+        raise ValueError(
+            "y_forecast_prob must have shape "
+            "(n_samples, n_classes)."
+        )
+
+    if n_classes is None:
+        n_classes = y_forecast_prob.shape[1]
+
+    if y_forecast_prob.shape[1] != n_classes:
+        raise ValueError(
+            f"Expected {n_classes} probability columns, but received "
+            f"{y_forecast_prob.shape[1]}."
+        )
+
+    if len(y_true_labels) != len(y_forecast_prob):
+        raise ValueError(
+            "y_true_labels and y_forecast_prob must contain "
+            "the same number of samples."
+        )
+
+    if np.any(
+        (y_true_labels < 0)
+        | (y_true_labels >= n_classes)
+    ):
+        raise ValueError(
+            f"Labels must be between 0 and {n_classes - 1}."
+        )
+
+    if not np.allclose(
+        y_forecast_prob.sum(axis=1),
+        1.0,
+    ):
+        raise ValueError(
+            "Each row of y_forecast_prob must sum to one."
+        )
+
+    y_true_one_hot = np.eye(
+        n_classes,
+        dtype=float,
+    )[y_true_labels]
+
+    climatology_prob = (
+        np.bincount(
+            y_true_labels,
+            minlength=n_classes,
+        )
+        / len(y_true_labels)
+    )
+
+    y_climatology_prob = np.broadcast_to(
+        climatology_prob,
+        y_forecast_prob.shape,
+    )
+
+    bs_forecast = _compute_brier_score(
+        y_true=y_true_one_hot,
+        y_prob=y_forecast_prob,
+    )
+
+    bs_climatology = _compute_brier_score(
+        y_true=y_true_one_hot,
+        y_prob=y_climatology_prob,
+    )
+
+    if np.isclose(bs_climatology, 0):
+        raise ZeroDivisionError(
+            "The climatological Brier score is zero, so BSS is undefined."
+        )
+
+    bss = _compute_brier_skill_score(
+        y_true=y_true_one_hot,
+        y_prob=y_forecast_prob,
+        y_prob_ref=y_climatology_prob,
+    )
+
+    return (
+        bs_forecast,
+        bs_climatology,
+        bss,
+    )

@@ -3,22 +3,55 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from numpy import ndarray
+import cartopy.crs as ccrs
 import cartopy.feature as cfeature
+from typing import Sequence
+
+
+GEOGRAPHICAL_BOUNDS = {
+    "mediterranean": ((25, 50), (-20, 45)),
+    "morocco": ((30, 36), (-11, 0)),
+    "larger mediterranean": ((25, 60), (-30, 45)),
+    "atlantic": ((25, 80), (-50, 30)),
+    "north atlantic": ((50, 65), (-60, 0)),
+    "cca": ((20, 50), (-30, 20)),
+    "new atlantic": ((20, 80), (-50, 30)),
+    "extended europe": ((25, 80), (-20, 40)),
+    "global": (None, None),
+}
 
 
 def filter_dataset(
     dataset: xr.Dataset,
-    latitude: tuple[int, int] | None,
-    longitude: tuple[int, int] | None,
+    geographical_filter: str,
 ) -> xr.Dataset:
     """
     Filter a dataset by latitude and longitude.
 
     :param dataset:    The dataset to be filtered.
-    :param latitude:   The latitude of the dataset to be filtered. None if the dataset is not filtered on the latitude.
-    :param longitude:  The longitude of the dataset to be filtered. None if the dataset is not filtered on the longitude.
+    :param geographical_filter: The geographical filter to be applied. Supported values are:
+                                ``"mediterranean"``, ``"morocco"``,
+                                ``"larger mediterranean"``, ``"atlantic"``,
+                                ``"north atlantic"``, ``"cca"``, ``"new atlantic"``,
+                                ``"extended europe"``, and ``"global"``.
     :return:           The filtered dataset.
     """
+    
+    geographical_filter = geographical_filter.lower()
+
+    if geographical_filter not in GEOGRAPHICAL_BOUNDS:
+        raise ValueError(
+            f"Unknown geographical filter: {geographical_filter}"
+        )
+
+    latitude, longitude = GEOGRAPHICAL_BOUNDS[
+        geographical_filter
+    ]
+    
+    #coordinate ordering
+    dataset = dataset.sortby("latitude")
+    dataset = dataset.sortby("longitude")
+    
     if latitude is None and longitude is None:
         return dataset
     elif latitude is None:
@@ -34,15 +67,146 @@ def filter_dataset(
         longitude=slice(longitude[0], longitude[1]),
     )
 
+def _generate_spatial_coordinates(
+    lower_bound: float,
+    upper_bound: float,
+    resolution: float,
+) -> np.ndarray:
+    """Generate regularly spaced coordinates inside two bounds."""
+    if resolution <= 0:
+        raise ValueError("Spatial resolution must be greater than zero.")
 
-def calculate_anomalies(x: xr.Dataset) -> xr.Dataset:
-    """
-    Compute temporal anomalies by removing the time mean.
+    lower_bound = min(lower_bound, upper_bound)
+    upper_bound = max(lower_bound, upper_bound)
 
-    :param x:   The temporal anomalies.
-    :return:    The anomalies.
+    number_of_steps = int(
+        np.floor(
+            (upper_bound - lower_bound) / resolution + 1e-10
+        )
+    )
+
+    coordinates = (
+        lower_bound
+        + np.arange(number_of_steps + 1) * resolution
+    )
+
+    # Avoid small floating-point errors.
+    return np.round(coordinates, decimals=10)
+
+
+def change_spatial_resolution(
+    dataset: xr.Dataset | xr.DataArray,
+    geographical_filter: str,
+    spatial_resolution: float | tuple[float, float],
+    interpolation_method: str = "nearest",
+) -> xr.Dataset | xr.DataArray:
     """
-    return x - x.mean(dim="time")
+    Filter and interpolate data to a requested spatial resolution.
+
+    Parameters
+    ----------
+    dataset
+        Dataset or DataArray containing latitude and longitude coordinates.
+    geographical_filter
+        Name of the geographical region.
+    spatial_resolution
+        Requested resolution in degrees. A scalar applies the same resolution
+        to both coordinates. A tuple specifies
+        ``(latitude_resolution, longitude_resolution)``.
+    interpolation_method
+        Interpolation method passed to ``xarray.interp``.
+
+    Returns
+    -------
+    xr.Dataset or xr.DataArray
+        Filtered data on the requested spatial grid.
+    """
+    geographical_filter = geographical_filter.lower()
+
+    if geographical_filter not in GEOGRAPHICAL_BOUNDS:
+        raise ValueError(
+            f"Unknown geographical filter: {geographical_filter}"
+        )
+
+    if isinstance(spatial_resolution, tuple):
+        latitude_resolution, longitude_resolution = spatial_resolution
+    else:
+        latitude_resolution = float(spatial_resolution)
+        longitude_resolution = float(spatial_resolution)
+
+    if latitude_resolution <= 0 or longitude_resolution <= 0:
+        raise ValueError(
+            "Latitude and longitude resolutions must be greater than zero."
+        )
+
+    dataset = filter_dataset(
+        dataset=dataset,
+        geographical_filter=geographical_filter,
+    )
+
+    latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[
+        geographical_filter
+    ]
+
+    # For the global region, use the available coordinate bounds.
+    if latitude_bounds is None:
+        latitude_bounds = (
+            float(dataset.latitude.min()),
+            float(dataset.latitude.max()),
+        )
+
+    if longitude_bounds is None:
+        longitude_bounds = (
+            float(dataset.longitude.min()),
+            float(dataset.longitude.max()),
+        )
+
+    target_lats = _generate_spatial_coordinates(
+        lower_bound=min(latitude_bounds),
+        upper_bound=max(latitude_bounds),
+        resolution=latitude_resolution,
+    )
+
+    target_lons = _generate_spatial_coordinates(
+        lower_bound=min(longitude_bounds),
+        upper_bound=max(longitude_bounds),
+        resolution=longitude_resolution,
+    )
+
+    current_lats = np.asarray(dataset.latitude.values)
+    current_lons = np.asarray(dataset.longitude.values)
+
+    latitude_matches = (
+        len(current_lats) == len(target_lats)
+        and np.allclose(current_lats, target_lats)
+    )
+
+    longitude_matches = (
+        len(current_lons) == len(target_lons)
+        and np.allclose(current_lons, target_lons)
+    )
+
+    #existing grid is correct.
+    if latitude_matches and longitude_matches:
+        return dataset
+
+    return dataset.interp(
+        latitude=target_lats,
+        longitude=target_lons,
+        method=interpolation_method,
+        kwargs={"fill_value": "extrapolate"},
+    )
+    
+def calculate_anomalies(
+    x: xr.Dataset | xr.DataArray,
+    dim: str | Sequence[str] = "time",
+) -> xr.Dataset | xr.DataArray:
+    """
+    Calculate anomalies by removing the mean over one or more dimensions.
+
+    The default remains compatible with ``preprocess_dataset``.
+    """
+    return x - x.mean(dim=dim)
 
 
 def preprocess_dataset(
@@ -65,7 +229,7 @@ def preprocess_dataset(
                                     Supported values are:
                                     ``"mediterranean"``, ``"morocco"``,
                                     ``"larger mediterranean"``, ``"atlantic"``,
-                                    ``"north atlantic"``, ``"cca"``, ``"new atlantic"``, and ``"global"``.
+                                    ``"north atlantic"``, ``"cca"``, ``"new atlantic"``, ``"extended europe"``, and ``"global"``.
     :param months_filter:           List of months to retain, expressed as integers between 1 and 12.
     :param anomalies:               If True, remove the mean for each day of the year, producing daily anomalies.
     :param normalization:           If True, divide the data by its standard deviation over the time dimension.
@@ -74,35 +238,7 @@ def preprocess_dataset(
     """
 
     dataset = xr.open_dataset(filename)[variable_name] * multiplication_factor
-
-    if geographical_filter == "mediterranean":
-        latitude = (25, 50)
-        longitude = (-20, 45)
-    elif geographical_filter == "morocco":
-        latitude = (36, 30)
-        longitude = (-11, 0)
-    elif geographical_filter == "larger mediterranean":
-        latitude = (25, 60)
-        longitude = (-30, 45)
-    elif geographical_filter == "atlantic":
-        latitude = (25, 80)
-        longitude = (-50, 30)
-    elif geographical_filter == "north atlantic":
-        latitude = (50, 65)
-        longitude = (-60, 0)
-    elif geographical_filter == "cca":
-        latitude = (20, 50)
-        longitude = (-30, 20)
-    elif geographical_filter == "new atlantic":
-        latitude = (20, 80)
-        longitude = (-50, 30)
-    elif geographical_filter == "global":
-        latitude = None
-        longitude = None
-    else:
-        raise ValueError(f"Unknown geographical filter: {geographical_filter}")
-
-    dataset = filter_dataset(dataset=dataset, latitude=latitude, longitude=longitude)
+    dataset = filter_dataset(dataset=dataset, geographical_filter=geographical_filter)
     dataset = dataset.sel(time=np.isin(dataset.time.dt.month, months_filter))
 
     if anomalies:
@@ -149,3 +285,166 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     ax.set(xlabel="Epoch", ylabel="Loss")
     plt.legend()
     plt.show()
+
+    
+def preprocess_forecast_data(
+    fpath: str,
+    reference_date: str,
+    variable_name: str,
+    multiplication_factor: float,
+    geographical_filter: str,
+    anomalies: bool,
+    normalization: bool,
+    rolling_window: int,
+    spatial_resolution: float | tuple[float, float],
+    weights: xr.DataArray | None = None,
+) -> xr.Dataset:
+    """Load and preprocess forecast data for one reference date."""
+    ds_ensemble = xr.open_dataset(
+        (
+            f"{fpath}/plev_data_perturbed_members_"
+            f"2004{reference_date}-2020{reference_date}.grb"
+        ),
+        engine="cfgrib",
+    )[[variable_name]]
+
+    ds_control = xr.open_dataset(
+        (
+            f"{fpath}/plev_data_unperturbed_control_member_"
+            f"2004{reference_date}-2020{reference_date}.grb"
+        ),
+        engine="cfgrib",
+    )[[variable_name]]
+
+    try:
+        dataset = xr.concat(
+            [ds_ensemble, ds_control],
+            dim="number",
+        )
+
+        dataset[variable_name] *= multiplication_factor
+
+        # Convert forecast steps to daily lead times.
+        dataset = dataset.groupby(
+            dataset["step"].dt.days
+        ).mean()
+
+        if anomalies:
+            dataset = calculate_anomalies(
+                dataset,
+                dim=("time", "number"),
+            )
+
+        if normalization:
+            standard_deviation = dataset.std()
+            dataset = dataset / standard_deviation.where(
+                standard_deviation != 0
+            )
+
+        dataset = change_spatial_resolution(
+            dataset=dataset,
+            geographical_filter=geographical_filter,
+            spatial_resolution=spatial_resolution,
+            interpolation_method="nearest",
+        )
+
+        if rolling_window > 0:
+            dataset = dataset.rolling(
+                days=rolling_window,
+                min_periods=1,
+                center=True,
+            ).mean()
+        elif rolling_window < 0:
+            raise ValueError(
+                "rolling_window cannot be negative."
+            )
+
+        if weights is not None:
+            dataset = dataset * weights
+
+        dataset.load()
+
+    finally:
+        ds_ensemble.close()
+        ds_control.close()
+
+    return dataset
+
+
+def visualise_s2s_cluster_contours(
+    dataset_xarray: xr.DataArray,
+    regime_names: list[str],
+    regime_order: list[int],
+    vmin: float,
+    vmax: float,
+    step: float,
+    color_scheme: str,
+    unit: str = "",
+    col_number: int = 2,
+    borders: bool = True,
+    projection=ccrs.Orthographic(0, 45),
+):
+    """
+    Visualise S2S cluster-center fields as contour maps.
+
+    :param dataset_xarray: DataArray with dimensions ``label``, ``latitude``, and ``longitude``.
+    :param regime_names: Names to use as subplot titles.
+    :param regime_order: Order in which the regimes should be displayed.
+    :param vmin: Minimum contour value.
+    :param vmax: Maximum contour value.
+    :param step: Contour interval.
+    :param color_scheme: Matplotlib colormap name.
+    :param unit: Unit label for the colorbar.
+    :param col_number: Number of subplot columns.
+    :param borders: Whether to draw country borders.
+    :param projection: Cartopy projection used for the subplot axes.
+    :return: Matplotlib figure.
+    """
+    x, y = np.meshgrid(
+        dataset_xarray.longitude,
+        dataset_xarray.latitude,
+    )
+
+    fig, axes = plt.subplots(
+        1,
+        col_number,
+        figsize=(14, 5),
+        subplot_kw={"projection": projection},
+    )
+
+    levels = np.arange(vmin, vmax, step)
+
+    for plot_index, regime_index in enumerate(regime_order):
+
+        cs = axes.flat[plot_index].contourf(
+            x,
+            y,
+            dataset_xarray[regime_index, :, :],
+            levels=levels,
+            transform=ccrs.PlateCarree(),
+            cmap=color_scheme,
+            extend="both",
+        )
+
+        axes.flat[plot_index].coastlines()
+
+        if borders:
+            axes.flat[plot_index].add_feature(cartopy.feature.BORDERS)
+
+        axes.flat[plot_index].set_title(regime_names[plot_index])
+
+    cbar = fig.colorbar(
+        cs,
+        ax=axes.ravel().tolist(),
+        orientation="horizontal",
+        fraction=0.05,
+        pad=0.08,
+    )
+
+    if unit:
+        cbar.set_label(unit)
+
+    plt.tight_layout()
+
+    return fig
+
