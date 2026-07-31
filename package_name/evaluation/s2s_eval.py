@@ -11,13 +11,51 @@ from sklearn.metrics import roc_auc_score
 from package_name.evaluation.metrics import calculate_cluster_brier_skill_score
 from typing import Sequence
 from pathlib import Path
+from enum import Enum
+from typing import Literal
+from collections.abc import Iterator
 
-METHOD_NAMES = {
-    "cmmvae": "CMM-VAE",
-    "pca": "PCA",
-}
+MethodName = Literal["cmmvae", "pca"]
+    
+
+def save_cprobs(
+    cprobs: tuple[pd.DataFrame, ...],
+    methods: Sequence[MethodName],
+    data: tuple[str, ...],
+    cluster_number: int,
+    chosen_count: int,
+    output_dir: str | Path = "results",
+) -> None:
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    '''
+    Save conditional probabilities to CSV files.
+    cprobs: Tuple of DataFrames containing conditional probabilities for each method.
+    methods: Sequence of method names corresponding to the cprobs.
+    data: Tuple of strings indicating the type of data (e.g., "era5", "forecast").
+    cluster_number: Number of clusters used in the forecast.
+    chosen_count: Number of chosen samples for the CMM-VAE method. Default is 1.
+    output_dir: Directory where the CSV files will be saved. Default is "results".
+    
+    Returns: None. Saves the conditional probabilities to CSV files in the specified output directory.
+    '''
+    
+
+    FILE_NAME = "cond_prob_{method}_{data}_{cluster_number}_{chosen_count}.csv"
+    for method, cprob, data_type in zip(methods, cprobs, data):
+        file_path = output_dir / FILE_NAME.format(
+            method=method,
+            data=data_type,
+            cluster_number=cluster_number,
+            chosen_count=chosen_count if method == "cmmvae" else "",
+        )
+        cprob.to_csv(file_path, index=False)
+    return print(f"Conditional probabilities saved to {output_dir.resolve()}")
+
+    
 def plot_forecast_scores(
-    methods: Sequence[str],
+    methods: Sequence[MethodName],
     cluster_number: int,
     chosen_count: int = 1,
     n_bootstrap: int = 100,
@@ -28,27 +66,21 @@ def plot_forecast_scores(
     """
     Calculate and plot BSS and ROC AUC for multiple methods.
 
-    BSS is bootstrapped. ROC AUC is calculated once per lead time.
+    methods: List of method names to evaluate. Must be a subset of METHOD_NAMES keys.
+    cluster_number: Number of clusters used in the forecast.
+    chosen_count: Number of chosen samples for the CMM-VAE method. Default is 1.
+    n_bootstrap: Number of bootstrap samples for BSS and ROC AUC.
+    sample_fraction: Fraction of data to sample for each bootstrap iteration.
+    random_state: Random seed for reproducibility.  
+    save_results: If True, save the BSS and ROC AUC results to CSV files in the "results" directory.
+    
+    Returns:figures of BSS and ROC AUC plots.
     """
     bss_results = []
     roc_results = []
 
-    if save_results:
-        Path("results").mkdir(
-            parents=True,
-            exist_ok=True,
-        )
-
     for method in methods:
-        if method not in METHOD_NAMES:
-            raise ValueError(
-                f"Unknown method {method!r}. "
-                f"Choose from {list(METHOD_NAMES)}."
-            )
-
-        method_name = METHOD_NAMES[method]
-
-        print(f"Processing {method_name}")
+        method_name = method.upper()
 
         merged_forecast = _load_merged_forecast(
             method=method,
@@ -74,7 +106,12 @@ def plot_forecast_scores(
         bss_results.append(method_bss)
         roc_results.append(method_roc)
 
-        if save_results:
+        if save_results is True:
+            Path("results").mkdir(
+            parents=True,
+            exist_ok=True,
+            )
+            
             method_bss.to_csv(
                 f"results/bss_s2s_{method}_bootstrapped_"
                 f"{cluster_number}.csv",
@@ -103,52 +140,121 @@ def plot_forecast_scores(
     )
 
 def _load_merged_forecast(
-    method: str,
+    method: MethodName,
     cluster_number: int,
     chosen_count: int = 1,
 ) -> pd.DataFrame:
     """Load and merge forecast and ERA5 probabilities."""
+    FILE_NAME = "results/cond_prob_{method}_{data}_{cluster_number}_{chosen_count}.csv"
 
-    #if method is not cmmvae or pca or cca, raise error
-    if method not in ["cmmvae", "pca", "cca"]:
-        raise ValueError(
-            f"Invalid method: {method}. Must be 'cmmvae', 'pca', or 'cca'."
-        )
-    
-    era5_file=f"results/cond_prob_{method}_era5_{cluster_number}.csv"
-    if method == "cmmvae":
-        forecast_file=f"results/cond_prob_{method}_forecast_{cluster_number}_{chosen_count}.csv"
-    else:
-        forecast_file=f"results/cond_prob_{method}_forecast_{cluster_number}.csv"
-
-    probability_columns = [str(i) for i in range(cluster_number)]
+    era5_file = FILE_NAME.format(
+        method=method,
+        data="era5",
+        cluster_number=cluster_number,
+        chosen_count=(
+            chosen_count
+            if method == "cmmvae"
+            else "")
+    )
+    forecast_file = FILE_NAME.format(
+        method=method,
+        data="forecast",
+        cluster_number=cluster_number,
+        chosen_count=(
+            chosen_count
+            if method == "cmmvae"
+            else ""
+        ),
+    )
 
     era5 = pd.read_csv(era5_file)
-
-    era5["label"] = (
-        era5[probability_columns]
-        .idxmax(axis=1)
-        .astype(int)
-    )
-    era5["prob"] = era5[probability_columns].max(axis=1)
-
-    era5 = era5.rename(
-        columns={
-            str(i): f"era5_{i}"
-            for i in range(cluster_number)
-        }
-    )
-
     forecast = pd.read_csv(forecast_file)
 
+    probability_columns = [str(i) for i in range(cluster_number)]
+    probabilities = era5[probability_columns]
+
+    era5 = era5.assign(
+        label=probabilities.idxmax(axis=1).astype(int),
+        prob=probabilities.max(axis=1),
+    ).rename(
+        columns={column: f"era5_{column}" for column in probability_columns}
+    )
+
     return (
-        forecast
-        .merge(era5, on="valid_date", how="inner")
+        forecast.merge(era5, on="valid_date", how="inner")
         .dropna()
         .reset_index(drop=True)
     )
-    
 
+
+def _bootstrap_samples_by_leadtime(
+    merged_forecast: pd.DataFrame,
+    cluster_number: int,
+    n_bootstrap: int,
+    sample_fraction: float,
+    random_state: int | None,
+    *,
+    require_all_classes: bool = False,
+    max_attempts: int = 1000,
+) -> Iterator[tuple[int, int, pd.DataFrame]]:
+    """Yield bootstrap samples for every forecast lead time."""
+    if n_bootstrap < 1:
+        raise ValueError("n_bootstrap must be at least 1.")
+
+    if not 0 < sample_fraction <= 1:
+        raise ValueError(
+            "sample_fraction must be greater than 0 and at most 1."
+        )
+
+    rng = np.random.default_rng(random_state)
+    expected_classes = set(range(cluster_number))
+
+    for leadtime, leadtime_data in merged_forecast.groupby("leadtime"):
+        if require_all_classes:
+            present_classes = set(
+                leadtime_data["label"].astype(int).unique()
+            )
+            missing_classes = expected_classes - present_classes
+
+            if missing_classes:
+                raise ValueError(
+                    f"Lead time {leadtime} is missing classes "
+                    f"{sorted(missing_classes)}."
+                )
+
+        sample_size = max(
+            1,
+            round(len(leadtime_data) * sample_fraction),
+        )
+
+        for bootstrap in range(n_bootstrap):
+            attempts = max_attempts if require_all_classes else 1
+
+            for _ in range(attempts):
+                sample_indices = rng.integers(
+                    0,
+                    len(leadtime_data),
+                    size=sample_size,
+                )
+                sampled = leadtime_data.iloc[sample_indices]
+
+                if not require_all_classes:
+                    break
+
+                sampled_classes = set(
+                    sampled["label"].astype(int).unique()
+                )
+                if sampled_classes == expected_classes:
+                    break
+            else:
+                raise RuntimeError(
+                    "Could not generate a bootstrap sample containing "
+                    f"every class for lead time {leadtime} after "
+                    f"{max_attempts} attempts."
+                )
+
+            yield int(leadtime), bootstrap, sampled
+            
 
 def bootstrap_brier_skill_score(
     merged_forecast: pd.DataFrame,
@@ -158,55 +264,48 @@ def bootstrap_brier_skill_score(
     sample_fraction: float = 0.9,
     random_state: int | None = None,
 ) -> pd.DataFrame:
-    """Bootstrap Brier skill scores for every lead time."""
-    rng = np.random.default_rng(random_state)
-
+    """Calculate bootstrapped Brier skill scores by lead time.
+    merged_forecast: DataFrame containing merged forecast and ERA5 probabilities.
+    method_name: Name of the method used for the forecast.
+    cluster_number: Number of clusters used in the forecast.
+    n_bootstrap: Number of bootstrap samples to generate for each lead time.
+    sample_fraction: Fraction of data to sample for each bootstrap iteration.
+    random_state: Random seed for reproducibility.
+    
+    Returns: DataFrame containing Brier skill scores for each lead time and bootstrap sample.
+    """
     probability_columns = [
-        str(i)
-        for i in range(cluster_number)
+        str(cluster) for cluster in range(cluster_number)
     ]
+    results: list[dict[str, str | int | float]] = []
 
-    results = []
+    samples = _bootstrap_samples_by_leadtime(
+        merged_forecast=merged_forecast,
+        cluster_number=cluster_number,
+        n_bootstrap=n_bootstrap,
+        sample_fraction=sample_fraction,
+        random_state=random_state,
+    )
 
-    for leadtime, leadtime_data in merged_forecast.groupby(
-        "leadtime"
-    ):
-        leadtime_data = leadtime_data.reset_index(drop=True)
-
-        sample_size = max(
-            1,
-            round(len(leadtime_data) * sample_fraction),
+    for leadtime, bootstrap, sampled in samples:
+        _, _, bss = calculate_cluster_brier_skill_score(
+            y_true_labels=sampled["label"].to_numpy(),
+            y_forecast_prob=sampled[
+                probability_columns
+            ].to_numpy(),
+            n_classes=cluster_number,
         )
 
-        for bootstrap in range(n_bootstrap):
-            sample_indices = rng.integers(
-                0,
-                len(leadtime_data),
-                size=sample_size,
-            )
+        results.append(
+            {
+                "Method": method_name,
+                "Leadtime": leadtime,
+                "Bootstrap": bootstrap,
+                "BSS": bss,
+            }
+        )
 
-            sampled = leadtime_data.iloc[sample_indices]
-
-            _, _, bss = calculate_cluster_brier_skill_score(
-                y_true_labels=sampled["label"].to_numpy(),
-                y_forecast_prob=sampled[
-                    probability_columns
-                ].to_numpy(),
-                n_classes=cluster_number,
-            )
-
-            results.append(
-                {
-                    "Method": method_name,
-                    "Leadtime": leadtime,
-                    "Bootstrap": bootstrap,
-                    "BSS": bss,
-                }
-            )
-
-    return pd.DataFrame(results)
-
-
+    return pd.DataFrame.from_records(results)
 
 def roc_auc_by_leadtime(
     merged_forecast: pd.DataFrame,
@@ -216,83 +315,54 @@ def roc_auc_by_leadtime(
     sample_fraction: float = 0.9,
     random_state: int | None = None,
 ) -> pd.DataFrame:
-    """Bootstrap multiclass ROC AUC for every lead time."""
-    rng = np.random.default_rng(random_state)
+    """Calculate bootstrapped multiclass ROC AUC by lead time.
+    merged_forecast: DataFrame containing merged forecast and ERA5 probabilities.
+    method_name: Name of the method used for the forecast.
+    cluster_number: Number of clusters used in the forecast.
+    n_bootstrap: Number of bootstrap samples to generate for each lead time.
+    sample_fraction: Fraction of data to sample for each bootstrap iteration.
+    random_state: Random seed for reproducibility.
 
+    Returns: DataFrame containing ROC AUC scores for each lead time and bootstrap sample.
+    """
     probability_columns = [
-        str(i)
-        for i in range(cluster_number)
+        str(cluster) for cluster in range(cluster_number)
     ]
-    expected_classes = set(range(cluster_number))
+    results: list[dict[str, str | int | float]] = []
 
-    results = []
+    samples = _bootstrap_samples_by_leadtime(
+        merged_forecast=merged_forecast,
+        cluster_number=cluster_number,
+        n_bootstrap=n_bootstrap,
+        sample_fraction=sample_fraction,
+        random_state=random_state,
+        require_all_classes=True,
+    )
 
-    for leadtime, leadtime_data in merged_forecast.groupby(
-        "leadtime"
-    ):
-        leadtime_data = leadtime_data.reset_index(drop=True)
+    for leadtime, bootstrap, sampled in samples:
+        truth = sampled["label"].to_numpy(dtype=int)
+        prediction = sampled[
+            probability_columns
+        ].to_numpy(dtype=float)
 
-        present_classes = set(
-            leadtime_data["label"].astype(int).unique()
+        score = roc_auc_score(
+            truth,
+            prediction,
+            labels=np.arange(cluster_number),
+            multi_class="ovo",
+            average="macro",
         )
 
-        if present_classes != expected_classes:
-            raise ValueError(
-                f"Lead time {leadtime} is missing classes "
-                f"{sorted(expected_classes - present_classes)}."
-            )
-
-        sample_size = max(
-            1,
-            round(len(leadtime_data) * sample_fraction),
+        results.append(
+            {
+                "Method": method_name,
+                "Leadtime": leadtime,
+                "Bootstrap": bootstrap,
+                "ROC_AUC": score,
+            }
         )
 
-        for bootstrap in range(n_bootstrap):
-            # Resample until every class is represented.
-            for _ in range(1000):
-                sample_indices = rng.integers(
-                    0,
-                    len(leadtime_data),
-                    size=sample_size,
-                )
-
-                sampled = leadtime_data.iloc[
-                    sample_indices
-                ]
-
-                truth = sampled[
-                    "label"
-                ].to_numpy(dtype=int)
-
-                if set(np.unique(truth)) == expected_classes:
-                    break
-            else:
-                raise RuntimeError(
-                    f"Could not generate a valid ROC bootstrap "
-                    f"sample for lead time {leadtime}."
-                )
-
-            prediction = sampled[
-                probability_columns
-            ].to_numpy(dtype=float)
-
-            score = roc_auc_score(
-                truth,
-                prediction,
-                labels=np.arange(cluster_number),
-                multi_class="ovo",
-                average="macro",
-            )
-
-            results.append(
-                {
-                    "Method": method_name,
-                    "Leadtime": leadtime,
-                    "Bootstrap": bootstrap,
-                    "ROC_AUC": score,
-                }
-            )
-    return pd.DataFrame(results)
+    return pd.DataFrame.from_records(results)
 
 def _plot_bss_and_roc(
     bss_data: pd.DataFrame,
@@ -300,15 +370,13 @@ def _plot_bss_and_roc(
     minimum_leadtime: int = 3,
     maximum_leadtime: int = 35,
 ):
-    """Plot bootstrapped BSS and non-bootstrapped ROC AUC."""
-    bss_plot_data = bss_data.loc[
-        bss_data["Leadtime"] >= minimum_leadtime
-    ]
-
-    roc_plot_data = roc_data.loc[
-        roc_data["Leadtime"] >= minimum_leadtime
-    ]
-
+    """Plot bootstrapped BSS and ROC AUC.
+    bss_data: DataFrame containing Brier skill scores for each lead time and bootstrap sample.
+    roc_data: DataFrame containing ROC AUC scores for each lead time and bootstrap sample.
+    minimum_leadtime: Minimum lead time to display on the x-axis.
+    maximum_leadtime: Maximum lead time to display on the x-axis.
+    
+    Returns: Matplotlib figure and axes objects containing the BSS and ROC AUC plots."""
     fig, axes = plt.subplots(
         nrows=1,
         ncols=2,
@@ -317,52 +385,54 @@ def _plot_bss_and_roc(
         sharex=True,
     )
 
-    # Brier skill score
-    sns.lineplot(
-        data=bss_plot_data,
-        x="Leadtime",
-        y="BSS",
-        hue="Method",
-        errorbar=("pi", 95),
-        ax=axes[0],
+    plot_specs = (
+        {
+            "axis": axes[0],
+            "data": bss_data,
+            "metric": "BSS",
+            "reference": 0.0,
+            "title": "(a) Brier skill score",
+            "ylabel": "Brier skill score",
+        },
+        {
+            "axis": axes[1],
+            "data": roc_data,
+            "metric": "ROC_AUC",
+            "reference": 0.5,
+            "title": "(b) ROC AUC",
+            "ylabel": "Multiclass ROC AUC",
+        },
     )
 
-    axes[0].axhline(
-        y=0,
-        color="black",
-        linewidth=1,
-    )
-    axes[0].set_title("(a) Brier skill score")
-    axes[0].set_xlabel("Lead time")
-    axes[0].set_ylabel("Brier skill score")
-    axes[0].set_xlim(
-        minimum_leadtime,
-        maximum_leadtime,
-    )
+    for spec in plot_specs:
+        axis = spec["axis"]
+        plot_data = spec["data"].loc[
+            spec["data"]["Leadtime"].between(
+                minimum_leadtime,
+                maximum_leadtime,
+            )
+        ]
 
-    # ROC AUC
-    sns.lineplot(
-        data=roc_plot_data,
-        x="Leadtime",
-        y="ROC_AUC",
-        hue="Method",
-        errorbar=("pi", 95),
-        ax=axes[1],
-    )
+        sns.lineplot(
+            data=plot_data,
+            x="Leadtime",
+            y=spec["metric"],
+            hue="Method",
+            errorbar=("pi", 95),
+            ax=axis,
+        )
 
-    axes[1].axhline(
-        y=0.5,
-        color="black",
-        linewidth=1,
-    )
-    axes[1].set_title("(b) ROC AUC")
-    axes[1].set_xlabel("Lead time")
-    axes[1].set_ylabel("Multiclass ROC AUC")
-    axes[1].set_xlim(
-        minimum_leadtime,
-        maximum_leadtime,
-    )
+        axis.axhline(
+            y=spec["reference"],
+            color="black",
+            linewidth=1,
+        )
+        axis.set(
+            title=spec["title"],
+            xlabel="Lead time",
+            ylabel=spec["ylabel"],
+            xlim=(minimum_leadtime, maximum_leadtime),
+        )
 
     fig.tight_layout()
-
     return fig, axes

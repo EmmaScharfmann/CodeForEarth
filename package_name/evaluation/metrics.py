@@ -226,25 +226,15 @@ def calculate_cluster_brier_skill_score(
     """
     Calculate forecast Brier score, climatological Brier score,
     and Brier skill score.
-
-    Parameters
-    ----------
-    y_true_labels
-        Observed integer cluster labels with shape ``(n_samples,)``.
-    y_forecast_prob
-        Forecast probabilities with shape
-        ``(n_samples, n_classes)``.
-    n_classes
-        Number of clusters. Inferred from y_forecast_prob when omitted.
-
-    Returns
-    -------
-    bs_forecast
-        Brier score of the forecast.
-    bs_climatology
-        Brier score of the climatological forecast.
-    bss
-        Brier skill score relative to climatology.
+    
+    y_true_labels: Observed integer cluster labels with shape (n_samples,).
+    y_forecast_prob: Forecast probabilities with shape (n_samples, n_classes).
+    n_classes: Number of clusters. Inferred from y_forecast_prob when omitted.
+    
+    returns: Tuple of (bs_forecast, bs_climatology, bss): 
+    bs_forecast: Brier score of the forecast.
+    bs_climatology: Brier score of the climatological forecast.
+    bss: Brier skill score relative to climatology.
     """
     y_true_labels = np.asarray(
         y_true_labels,

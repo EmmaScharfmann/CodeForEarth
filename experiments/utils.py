@@ -3,69 +3,72 @@ import matplotlib.pyplot as plt
 import numpy as np
 import xarray as xr
 from numpy import ndarray
-import cartopy.crs as ccrs
 import cartopy.feature as cfeature
 from typing import Sequence
+from package_name.constants import EPSILON
+from enum import Enum
 
-
+class GeographicalFilter(str, Enum):
+    """Enum for supported geographical filters."""
+    MEDITERRANEAN = "mediterranean"
+    MOROCCO = "morocco"
+    LARGER_MEDITERRANEAN = "larger mediterranean"
+    ATLANTIC = "atlantic"
+    NORTH_ATLANTIC = "north atlantic"
+    CCA = "cca"
+    NEW_ATLANTIC = "new atlantic"
+    EXTENDED_EUROPE = "extended europe"
+    GLOBAL = "global"
+ 
+ 
 GEOGRAPHICAL_BOUNDS = {
-    "mediterranean": ((25, 50), (-20, 45)),
-    "morocco": ((30, 36), (-11, 0)),
-    "larger mediterranean": ((25, 60), (-30, 45)),
-    "atlantic": ((25, 80), (-50, 30)),
-    "north atlantic": ((50, 65), (-60, 0)),
-    "cca": ((20, 50), (-30, 20)),
-    "new atlantic": ((20, 80), (-50, 30)),
-    "extended europe": ((25, 80), (-20, 40)),
-    "global": (None, None),
+    GeographicalFilter.MEDITERRANEAN: ((25, 50), (-20, 45)),
+    GeographicalFilter.MOROCCO: ((30, 36), (-11, 0)),
+    GeographicalFilter.LARGER_MEDITERRANEAN: ((25, 60), (-30, 45)),
+    GeographicalFilter.ATLANTIC: ((25, 80), (-50, 30)),
+    GeographicalFilter.NORTH_ATLANTIC: ((50, 65), (-60, 0)),
+    GeographicalFilter.CCA: ((20, 50), (-30, 20)),
+    GeographicalFilter.NEW_ATLANTIC: ((20, 80), (-50, 30)),
+    GeographicalFilter.EXTENDED_EUROPE: ((25, 80), (-20, 40)),
+    GeographicalFilter.GLOBAL: (None, None),
 }
-
 
 def filter_dataset(
     dataset: xr.Dataset,
-    geographical_filter: str,
+    geographical_filter: GeographicalFilter,
 ) -> xr.Dataset:
     """
     Filter a dataset by latitude and longitude.
-
-    :param dataset:    The dataset to be filtered.
-    :param geographical_filter: The geographical filter to be applied. Supported values are:
-                                ``"mediterranean"``, ``"morocco"``,
-                                ``"larger mediterranean"``, ``"atlantic"``,
-                                ``"north atlantic"``, ``"cca"``, ``"new atlantic"``,
-                                ``"extended europe"``, and ``"global"``.
-    :return:           The filtered dataset.
+    
+    :param dataset:              The dataset to be filtered.
+    :param geographical_filter:  The geographical filter to be applied.
+                                 Supported values are members of GeographicalFilter enum.
+    :return:                     The filtered dataset.
     """
+    bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
     
-    geographical_filter = geographical_filter.lower()
-
-    if geographical_filter not in GEOGRAPHICAL_BOUNDS:
-        raise ValueError(
-            f"Unknown geographical filter: {geographical_filter}"
-        )
-
-    latitude, longitude = GEOGRAPHICAL_BOUNDS[
-        geographical_filter
-    ]
-    
-    #coordinate ordering
     dataset = dataset.sortby("latitude")
     dataset = dataset.sortby("longitude")
     
-    if latitude is None and longitude is None:
+    if bounds == (None, None):
+        # Global filter: no filtering applied
         return dataset
-    elif latitude is None:
+    elif bounds[0] is None:
+        # Only longitude bounds are specified
         return dataset.sel(
-            longitude=slice(longitude[0], longitude[1]),
+            longitude=slice(bounds[1][0], bounds[1][1]),
         )
-    elif longitude is None:
+    elif bounds[1] is None:
+        # Only latitude bounds are specified
         return dataset.sel(
-            latitude=slice(latitude[0], latitude[1]),
+            latitude=slice(bounds[0][0], bounds[0][1]),
         )
-    return dataset.sel(
-        latitude=slice(latitude[0], latitude[1]),
-        longitude=slice(longitude[0], longitude[1]),
-    )
+    else:
+        # Both latitude and longitude bounds are specified
+        return dataset.sel(
+            latitude=slice(bounds[0][0], bounds[0][1]),
+            longitude=slice(bounds[1][0], bounds[1][1]),
+        )
 
 def _generate_spatial_coordinates(
     lower_bound: float,
@@ -81,7 +84,7 @@ def _generate_spatial_coordinates(
 
     number_of_steps = int(
         np.floor(
-            (upper_bound - lower_bound) / resolution + 1e-10
+            (upper_bound - lower_bound) / resolution + EPSILON
         )
     )
 
@@ -89,44 +92,25 @@ def _generate_spatial_coordinates(
         lower_bound
         + np.arange(number_of_steps + 1) * resolution
     )
-
-    # Avoid small floating-point errors.
     return np.round(coordinates, decimals=10)
 
 
-def change_spatial_resolution(
+def _change_spatial_resolution(
     dataset: xr.Dataset | xr.DataArray,
-    geographical_filter: str,
+    geographical_filter: GeographicalFilter,
     spatial_resolution: float | tuple[float, float],
     interpolation_method: str = "nearest",
 ) -> xr.Dataset | xr.DataArray:
     """
     Filter and interpolate data to a requested spatial resolution.
-
-    Parameters
-    ----------
-    dataset
-        Dataset or DataArray containing latitude and longitude coordinates.
-    geographical_filter
-        Name of the geographical region.
-    spatial_resolution
-        Requested resolution in degrees. A scalar applies the same resolution
-        to both coordinates. A tuple specifies
-        ``(latitude_resolution, longitude_resolution)``.
-    interpolation_method
-        Interpolation method passed to ``xarray.interp``.
-
-    Returns
-    -------
-    xr.Dataset or xr.DataArray
-        Filtered data on the requested spatial grid.
+    
+    dataset: xr.Dataset | xr.DataArray
+    geographical_filter: GeographicalFilter
+    spatial_resolution: float | tuple[float, float]
+    interpolation_method: str
+    
+    returns: xr.Dataset | xr.DataArray
     """
-    geographical_filter = geographical_filter.lower()
-
-    if geographical_filter not in GEOGRAPHICAL_BOUNDS:
-        raise ValueError(
-            f"Unknown geographical filter: {geographical_filter}"
-        )
 
     if isinstance(spatial_resolution, tuple):
         latitude_resolution, longitude_resolution = spatial_resolution
@@ -144,22 +128,12 @@ def change_spatial_resolution(
         geographical_filter=geographical_filter,
     )
 
-    latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[
-        geographical_filter
-    ]
-
-    # For the global region, use the available coordinate bounds.
-    if latitude_bounds is None:
-        latitude_bounds = (
-            float(dataset.latitude.min()),
-            float(dataset.latitude.max()),
-        )
-
-    if longitude_bounds is None:
-        longitude_bounds = (
-            float(dataset.longitude.min()),
-            float(dataset.longitude.max()),
-        )
+    if geographical_filter == GeographicalFilter.GLOBAL:
+        latitude_bounds, longitude_bounds = _get_avaialble_coordinate_bounds(dataset)
+    else:
+        latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[
+            geographical_filter
+        ]
 
     target_lats = _generate_spatial_coordinates(
         lower_bound=min(latitude_bounds),
@@ -186,8 +160,7 @@ def change_spatial_resolution(
         and np.allclose(current_lons, target_lons)
     )
 
-    #existing grid is correct.
-    if latitude_matches and longitude_matches:
+    if latitude_matches is True and longitude_matches is True:
         return dataset
 
     return dataset.interp(
@@ -197,14 +170,30 @@ def change_spatial_resolution(
         kwargs={"fill_value": "extrapolate"},
     )
     
-def calculate_anomalies(
+def _get_avaialble_coordinate_bounds(
+    dataset: xr.Dataset | xr.DataArray,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """For the global region, use the available coordinate bounds.
+    """
+    latitude_bounds = (
+        float(dataset.latitude.min()),
+        float(dataset.latitude.max()),
+    )
+    longitude_bounds = (
+        float(dataset.longitude.min()),
+        float(dataset.longitude.max()),
+    )
+    return latitude_bounds, longitude_bounds
+
+def _calculate_anomalies(
     x: xr.Dataset | xr.DataArray,
     dim: str | Sequence[str] = "time",
 ) -> xr.Dataset | xr.DataArray:
     """
     Calculate anomalies by removing the mean over one or more dimensions.
-
-    The default remains compatible with ``preprocess_dataset``.
+    x: xr.Dataset | xr.DataArray
+    dim: str | Sequence[str]
+    returns: xr.Dataset | xr.DataArray
     """
     return x - x.mean(dim=dim)
 
@@ -213,7 +202,7 @@ def preprocess_dataset(
     filename: str,
     variable_name: str,
     multiplication_factor: float,
-    geographical_filter: str,
+    geographical_filter: GeographicalFilter,
     months_filter: list[int],
     anomalies: bool,
     normalization: bool,
@@ -226,10 +215,7 @@ def preprocess_dataset(
     :param variable_name:           Name of the variable to extract from the dataset.
     :param multiplication_factor:   Factor by which to multiply the variable values after loading.
     :param geographical_filter:     Name of the predefined geographical region to retain.
-                                    Supported values are:
-                                    ``"mediterranean"``, ``"morocco"``,
-                                    ``"larger mediterranean"``, ``"atlantic"``,
-                                    ``"north atlantic"``, ``"cca"``, ``"new atlantic"``, ``"extended europe"``, and ``"global"``.
+                                    Supported values are in ``GEOGRAPHICAL_BOUNDS``.
     :param months_filter:           List of months to retain, expressed as integers between 1 and 12.
     :param anomalies:               If True, remove the mean for each day of the year, producing daily anomalies.
     :param normalization:           If True, divide the data by its standard deviation over the time dimension.
@@ -242,7 +228,7 @@ def preprocess_dataset(
     dataset = dataset.sel(time=np.isin(dataset.time.dt.month, months_filter))
 
     if anomalies:
-        dataset = dataset.groupby("time.dayofyear").map(calculate_anomalies)
+        dataset = dataset.groupby("time.dayofyear").map(_calculate_anomalies)
     if normalization:
         dataset = dataset / dataset.std(dim="time")
     if rolling_window != 0:
@@ -288,40 +274,33 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
 
     
 def preprocess_forecast_data(
-    fpath: str,
-    reference_date: str,
+    dataset: xr.Dataset,
     variable_name: str,
     multiplication_factor: float,
-    geographical_filter: str,
+    geographical_filter: GeographicalFilter,
     anomalies: bool,
     normalization: bool,
     rolling_window: int,
     spatial_resolution: float | tuple[float, float],
     weights: xr.DataArray | None = None,
 ) -> xr.Dataset:
-    """Load and preprocess forecast data for one reference date."""
-    ds_ensemble = xr.open_dataset(
-        (
-            f"{fpath}/plev_data_perturbed_members_"
-            f"2004{reference_date}-2020{reference_date}.grb"
-        ),
-        engine="cfgrib",
-    )[[variable_name]]
-
-    ds_control = xr.open_dataset(
-        (
-            f"{fpath}/plev_data_unperturbed_control_member_"
-            f"2004{reference_date}-2020{reference_date}.grb"
-        ),
-        engine="cfgrib",
-    )[[variable_name]]
+    """Load and preprocess forecast data for one reference date.
+    
+    :param dataset:               Dataset containing the forecast data (members and control merged).
+    :param variable_name:         Name of the variable to extract from the dataset.
+    :param multiplication_factor: Factor by which to multiply the variable values after loading.
+    :param geographical_filter:   Name of the predefined geographical region to retain. 
+                                    Supported values are in ``GEOGRAPHICAL_BOUNDS``.
+    :param anomalies:             If True, remove the mean for each day of the year, producing daily anomalies.
+    :param normalization:         If True, divide the data by its standard deviation over the time dimension.
+    :param rolling_window:        Size of the centered rolling mean window along the time dimension. If 0, no smoothing is applied.
+    :param spatial_resolution:   Requested spatial resolution in degrees. A scalar applies the same resolution to both coordinates. A tuple specifies
+                                 ``(latitude_resolution, longitude_resolution)``.
+    :param weights:               Optional DataArray of weights to apply to the dataset after preprocessing.
+    :return:                      Preprocessed dataset containing the selected variable.
+    """
 
     try:
-        dataset = xr.concat(
-            [ds_ensemble, ds_control],
-            dim="number",
-        )
-
         dataset[variable_name] *= multiplication_factor
 
         # Convert forecast steps to daily lead times.
@@ -330,7 +309,7 @@ def preprocess_forecast_data(
         ).mean()
 
         if anomalies:
-            dataset = calculate_anomalies(
+            dataset = _calculate_anomalies(
                 dataset,
                 dim=("time", "number"),
             )
@@ -341,32 +320,33 @@ def preprocess_forecast_data(
                 standard_deviation != 0
             )
 
-        dataset = change_spatial_resolution(
+        dataset = _change_spatial_resolution(
             dataset=dataset,
             geographical_filter=geographical_filter,
             spatial_resolution=spatial_resolution,
             interpolation_method="nearest",
         )
-
-        if rolling_window > 0:
+        
+        if rolling_window < 0:
+            raise ValueError(
+                "rolling_window cannot be negative."
+            )
+        else:
             dataset = dataset.rolling(
                 days=rolling_window,
                 min_periods=1,
                 center=True,
             ).mean()
-        elif rolling_window < 0:
-            raise ValueError(
-                "rolling_window cannot be negative."
-            )
 
         if weights is not None:
             dataset = dataset * weights
 
         dataset.load()
-
-    finally:
-        ds_ensemble.close()
-        ds_control.close()
+    
+    except Exception as e:
+        raise RuntimeError(
+            f"Error processing dataset: {e}"
+        )
 
     return dataset
 
