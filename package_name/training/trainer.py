@@ -50,9 +50,10 @@ class VAETrainer:
         """
         self._model.load_weights(path)
 
-    def compile(self) -> None:
+    def compile(self, learning_rate: float = 1e-3) -> None:
         """Compile the model."""
-        self._model.compile(optimizer="adam")
+        optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        self._model.compile(optimizer=optimizer)
 
     def fit(
         self,
