@@ -10,6 +10,8 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 import pandas as pd
+import country_converter as coco
+import plotly.express as px
 
 def cluster_country_wise(
     df_in: pd.DataFrame, cluster_number: int, standardize: bool = True,
@@ -38,6 +40,88 @@ def cluster_country_wise(
 
     return df_norm, df_labels
 
+def calc_country_wise_cluster_means(
+    country_data: pd.DataFrame,
+    cluster_labels: pd.DataFrame,
+    ):
+    """
+    Plot the mean values for each cluster in a country-by-country manner.
+
+    :param country_data (pd.DataFrame): A DataFrame containing the country-wise data with iso2 labels.
+    :param cluster_labels (pd.DataFrame): A DataFrame containing the cluster labels for each country.
+
+    :return: A DataFrame with a row for each cluster and iso3 labels as columns containing the mean cluster values.
+    """
+    cc = coco.CountryConverter()
+
+    iso2_labels = country_data.columns.astype(str).tolist()
+    iso3_labels = cc.convert(names=iso2_labels, to='ISO3')
+
+    df_cluster_mean = pd.DataFrame(
+        columns=iso3_labels,
+        index=[f"Cluster {i}" for i in range(4)],
+        dtype=float
+    )
+    for cluster_id in range(4):
+        cluster_i = country_data[cluster_labels["labels"] == cluster_id]
+        df_cluster_mean.loc[f"Cluster {cluster_id}"] = cluster_i.mean().values
+
+    return df_cluster_mean
+
+def plot_country_wise_cluster_means(
+    country_data: pd.DataFrame,
+    cluster_labels: pd.DataFrame,
+    save_path: str = None
+    ):
+    """
+    Plot the mean values for each cluster in a country-by-country manner.
+
+    :param country_data (pd.DataFrame): A DataFrame containing the country-wise data with iso2 labels.
+    :param cluster_labels (pd.DataFrame): A DataFrame containing the cluster labels for each country.
+    :param save_path (str): The path to save the plot. If None, the plot is displayed.
+
+    :return: None
+    """
+    df_cluster_mean = calc_country_wise_cluster_means(country_data, cluster_labels)
+    df_plot = df_cluster_mean.reset_index().melt(
+        id_vars=['index'], 
+        var_name='iso3_labels', 
+        value_name='metric_value'
+        ).rename(columns={'index': 'cluster'})
+
+    fig = px.choropleth(
+        df_plot,
+        range_color=[-0.75, 0.75],
+        locations="iso3_labels",        
+        locationmode="ISO-3",         
+        color="metric_value", 
+        scope="europe",               
+        facet_col="cluster",         
+        color_continuous_scale=px.colors.diverging.BrBG, 
+        #title="Target Energy Clusters"
+    )
+
+    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+    fig.update_layout(
+        margin={"r":10, "t":40, "l":10, "b":5},
+        height=200, 
+        width=600,
+        coloraxis_colorbar=dict(
+            title="CF anomaly",     
+            thicknessmode="pixels",
+            thickness=5,  
+            orientation="h",          
+            lenmode="fraction",
+            len=0.5,              
+            yanchor="middle",       
+            y=-0.1
+            )
+        )
+    if save_path:
+        plt.savefig(save_path, dpi=300)
+
+    else:
+        fig.show()
 
 
 def filter_dataset(
