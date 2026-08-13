@@ -8,15 +8,16 @@ import numpy as np
 
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import roc_auc_score
-from package_name.evaluation.metrics import calculate_cluster_brier_skill_score
+from package_name.evaluation import metrics
 from typing import Sequence
 from pathlib import Path
 from enum import Enum
 from typing import Literal
 from collections.abc import Iterator
 
-MethodName = Literal["cmmvae", "pca"]
+type MethodName = Literal["cmmvae", "pca"]
     
+_FILE_NAME = "cond_prob_{method}_{data}_{cluster_number}_{chosen_count}.csv"
 
 def save_cprobs(
     cprobs: tuple[pd.DataFrame, ...],
@@ -25,9 +26,7 @@ def save_cprobs(
     cluster_number: int,
     chosen_count: int,
     output_dir: str | Path = "results",
-) -> None:
-    output_dir = Path(output_dir)
-    output_dir.mkdir(parents=True, exist_ok=True)
+) -> str:
     
     '''
     Save conditional probabilities to CSV files.
@@ -38,20 +37,24 @@ def save_cprobs(
     chosen_count: Number of chosen samples for the CMM-VAE method. Default is 1.
     output_dir: Directory where the CSV files will be saved. Default is "results".
     
-    Returns: None. Saves the conditional probabilities to CSV files in the specified output directory.
+    Returns: Saves the conditional probabilities to CSV files in the specified output directory 
+            and returns a message indicating the location of the saved files.
     '''
     
-
-    FILE_NAME = "cond_prob_{method}_{data}_{cluster_number}_{chosen_count}.csv"
+    output_dir = Path(output_dir)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    
+    
     for method, cprob, data_type in zip(methods, cprobs, data):
-        file_path = output_dir / FILE_NAME.format(
+        file_name = _FILE_NAME.format(
             method=method,
             data=data_type,
             cluster_number=cluster_number,
             chosen_count=chosen_count if method == "cmmvae" else "",
         )
+        file_path = output_dir / file_name
         cprob.to_csv(file_path, index=False)
-    return print(f"Conditional probabilities saved to {output_dir.resolve()}")
+    return f"Conditional probabilities saved to {output_dir.resolve()}"
 
     
 def plot_forecast_scores(
@@ -60,6 +63,7 @@ def plot_forecast_scores(
     chosen_count: int = 1,
     n_bootstrap: int = 100,
     sample_fraction: float = 0.9,
+    result_dir: str | Path = "results",
     random_state: int | None = None,
     save_results: bool = True,
 ):
@@ -71,13 +75,15 @@ def plot_forecast_scores(
     chosen_count: Number of chosen samples for the CMM-VAE method. Default is 1.
     n_bootstrap: Number of bootstrap samples for BSS and ROC AUC.
     sample_fraction: Fraction of data to sample for each bootstrap iteration.
+    result_dir: Directory to where conditional probabilities are saved and where BSS and ROC AUC results will be saved.
+                Default is "results".
     random_state: Random seed for reproducibility.  
     save_results: If True, save the BSS and ROC AUC results to CSV files in the "results" directory.
     
     Returns:figures of BSS and ROC AUC plots.
     """
-    bss_results = []
-    roc_results = []
+    bss_results: list[pd.DataFrame] = []
+    roc_results: list[pd.DataFrame] = []
 
     for method in methods:
         method_name = method.upper()
@@ -107,19 +113,19 @@ def plot_forecast_scores(
         roc_results.append(method_roc)
 
         if save_results is True:
-            Path("results").mkdir(
+            Path(result_dir).mkdir(
             parents=True,
             exist_ok=True,
             )
             
             method_bss.to_csv(
-                f"results/bss_s2s_{method}_bootstrapped_"
+                f"{result_dir}/bss_s2s_{method}_bootstrapped_"
                 f"{cluster_number}.csv",
                 index=False,
             )
 
             method_roc.to_csv(
-                f"results/roc_s2s_{method}_"
+                f"{result_dir}/roc_s2s_{method}_"
                 f"{cluster_number}.csv",
                 index=False,
             )
@@ -143,32 +149,24 @@ def _load_merged_forecast(
     method: MethodName,
     cluster_number: int,
     chosen_count: int = 1,
+    result_dir: str | Path = "results",
 ) -> pd.DataFrame:
     """Load and merge forecast and ERA5 probabilities."""
-    FILE_NAME = "results/cond_prob_{method}_{data}_{cluster_number}_{chosen_count}.csv"
+    
+    count = chosen_count if method == "cmmvae" else ""
+    era5_file = _FILE_NAME.format(method=method, 
+                                  data="era5", 
+                                  cluster_number=cluster_number, 
+                                  chosen_count=count)
+    forecast_file = _FILE_NAME.format(method=method, 
+                                      data="forecast", 
+                                      cluster_number=cluster_number, 
+                                      chosen_count=count)
+    
+    result_dir = Path(result_dir)
 
-    era5_file = FILE_NAME.format(
-        method=method,
-        data="era5",
-        cluster_number=cluster_number,
-        chosen_count=(
-            chosen_count
-            if method == "cmmvae"
-            else "")
-    )
-    forecast_file = FILE_NAME.format(
-        method=method,
-        data="forecast",
-        cluster_number=cluster_number,
-        chosen_count=(
-            chosen_count
-            if method == "cmmvae"
-            else ""
-        ),
-    )
-
-    era5 = pd.read_csv(era5_file)
-    forecast = pd.read_csv(forecast_file)
+    era5 = pd.read_csv(result_dir / era5_file)
+    forecast = pd.read_csv(result_dir / forecast_file)
 
     probability_columns = [str(i) for i in range(cluster_number)]
     probabilities = era5[probability_columns]
@@ -193,7 +191,6 @@ def _bootstrap_samples_by_leadtime(
     n_bootstrap: int,
     sample_fraction: float,
     random_state: int | None,
-    *,
     require_all_classes: bool = False,
     max_attempts: int = 1000,
 ) -> Iterator[tuple[int, int, pd.DataFrame]]:
@@ -264,7 +261,7 @@ def bootstrap_brier_skill_score(
     sample_fraction: float = 0.9,
     random_state: int | None = None,
 ) -> pd.DataFrame:
-    """Calculate bootstrapped Brier skill scores by lead time.
+    """Calculate bootstrapped Brier skill score by lead time.
     merged_forecast: DataFrame containing merged forecast and ERA5 probabilities.
     method_name: Name of the method used for the forecast.
     cluster_number: Number of clusters used in the forecast.
@@ -288,7 +285,7 @@ def bootstrap_brier_skill_score(
     )
 
     for leadtime, bootstrap, sampled in samples:
-        _, _, bss = calculate_cluster_brier_skill_score(
+        _, _, bss = metrics.calculate_forecast_brier_skill_score(
             y_true_labels=sampled["label"].to_numpy(),
             y_forecast_prob=sampled[
                 probability_columns

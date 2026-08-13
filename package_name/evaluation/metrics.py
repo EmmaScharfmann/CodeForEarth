@@ -218,7 +218,7 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
 
     return one_hot_quantiles.reshape(*original_shape, N)
 
-def calculate_cluster_brier_skill_score(
+def calculate_forecast_brier_skill_score(
     y_true_labels: np.ndarray,
     y_forecast_prob: np.ndarray,
     n_classes: int | None = None,
@@ -288,6 +288,11 @@ def calculate_cluster_brier_skill_score(
         dtype=float,
     )[y_true_labels]
 
+    if len(y_true_labels) == 0:
+        raise ValueError(
+            "y_true_labels and y_forecast_prob must contain "
+            "at least one sample."
+        )
     climatology_prob = (
         np.bincount(
             y_true_labels,
