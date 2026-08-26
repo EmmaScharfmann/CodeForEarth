@@ -91,7 +91,7 @@ class VAELoss:
         ) * tf.constant(  # TODO: why * self.pr_cluster_number?
             self.pr_cluster_number,
             dtype=target_true.dtype,
-        ) 
+        )
 
     def _calculate_mixture_regularisation(
         self, clusters_output: ClustersOutput, mixture_output: MixtureOutput
@@ -131,7 +131,7 @@ def _calculate_vae_regularisation_loss(
     gaussian_kl = tf.reduce_sum(
         component_kl * clusters_output.clusters_pred,
         axis=-1,
-    ) 
+    )
 
     return gaussian_kl
 
@@ -142,7 +142,7 @@ def _calculate_cluster_target_regularisation_loss(
     """Calculate the component of the loss ensuring that the cluster prediction made directly from the input variable (c) and that made from the target variable (cr) are close to each other"""
     return _calculate_categorical_kl_divergence(
         clusters_output.clusters_pred, clusters_output.target_clusters_pred
-    ) 
+    )
 
 
 def _calculate_gaussian_kl_divergence(

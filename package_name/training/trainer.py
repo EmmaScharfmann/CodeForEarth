@@ -28,11 +28,13 @@ class VAETrainer:
         self.custom_loss = VAELoss(
             original_dim=cfg.original_dim,
             pr_cluster_number=cfg.pr_cluster_number,
-            loss_factors=loss_factors
+            loss_factors=loss_factors,
         )
         self.path_to_save_weights = path_to_save_weights
 
-        self._encoder = EncoderBuilder(construct_encoder_config(cfg=self.cfg), training=True).build()
+        self._encoder = EncoderBuilder(
+            construct_encoder_config(cfg=self.cfg), training=True
+        ).build()
         self._decoder = DecoderBuilder(construct_decoder_config(cfg=self.cfg)).build()
         self._model = VAEModel(
             encoder=self._encoder,

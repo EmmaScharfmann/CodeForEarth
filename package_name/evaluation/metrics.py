@@ -1,129 +1,55 @@
 import numpy as np
-from package_name.inference.predictor import VAEPredictor
-from package_name.evaluation.pca_kmeans import PCAKmeansPredictor
-from package_name.evaluation.utils import predict_clusters
 from package_name.constants import EPSILON
 
-
-def compute_BSS_quantile_exceedance(
-    vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, q: float, larger_than: bool = True
-) -> float:
+def compute_inputs_to_calc_quantile_exceedance(
+    cluster_probs_testing: np.ndarray,
+    targets_testing: np.ndarray,
+    q: float,
+    cluster_probs_training: np.ndarray = None,
+    targets_training: np.ndarray = None,
+    larger_than: bool = True,
+) -> tuple:
     """
-    Compute the Brier skill score for the classification of the exceedance of a quantile
+    Compute the inputs for the function compute_BSS_clusters_target needed to calculate the Brier skill score for the classification of the exceedance of a quantile
     threshold by a set of CMM-VAE clusters.
 
-    For example, if 'targets' is a precipitation field and q = 0.95, the score will
-    measure how well the clusters predict the exceedance of the 95th percentile of
-    precipitation (the quantile is computed separately for each grid point).
+    For example, if 'targets' is a precipitation field and q = 0.95, the score will measure how well the clusters predict the exceedance of the 95th percentile of precipitation (the quantile is computed separately for each grid point).
 
-    :param vae: The CMM-VAE used to compute clusters
-    :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-        # latitudes, # longitudes)
-    :param targets: The target data for all time steps. Shape (# times, ...)
+    :param cluster_probs_testing: The probabilities of each cluster for all time steps. Shape (# times, # clusters)
+    :param cluster_probs_training: The training cluster probabilities. Shape (# times, # clusters)
+    :param targets_testing: The target data for all time steps. Shape (# times, ...)
+    :param targets_training: The training target data. Shape (# times, ...)
     :param q: The quantile threshold, between 0 and 1.
     :param larger_than: If True, the exceedance is defined as targets > quantile. If
         False, the exceedance is defined as targets < quantile.
-    :return: Brier skill score for the classification of the exceedance of the
-        quantile threshold by the clusters.
+    :return: Inputs needed to calculate the Brier skill score for the classification of the exceedance of the quantile threshold by the clusters.
     """
-    target_quantile = np.nanquantile(targets, q=q, axis=0)
-    exceedance = targets > target_quantile if larger_than else targets < target_quantile
-    exceedance = exceedance.astype(int)
-    one_hot_exceedance = np.stack([1 - exceedance, exceedance], axis=-1)
+    if cluster_probs_training is None or targets_training is None:
+        cluster_probs_training = cluster_probs_testing
+        targets_training = targets_testing
 
-    return compute_BSS_clusters_target(
-        vae=vae, inputs=inputs, targets_categorical=one_hot_exceedance
+    target_quantile = np.nanquantile(targets_training, q=q, axis=0)
+    exceedance_testing = targets_testing > target_quantile if larger_than else targets_testing < target_quantile
+    exceedance_testing = exceedance_testing.astype(int)
+
+    exceedance_training = targets_training > target_quantile if larger_than else targets_training < target_quantile
+    exceedance_training = exceedance_training.astype(int)
+
+    targets_categorical_testing = np.stack([1 - exceedance_testing, exceedance_testing], axis=-1)
+    targets_categorical_training = np.stack([1 - exceedance_training, exceedance_training], axis=-1)
+
+    conditional_probs = compute_conditional_probabilities(
+        cluster_probs=cluster_probs_training, targets_categorical=targets_categorical_training
     )
 
-
-def compute_BSS_quantile_exceedance_pca(
-    pca_predictor: PCAKmeansPredictor, inputs: np.ndarray, targets: np.ndarray, q: float, larger_than: bool = True
-) -> float:
-    """
-    Compute the Brier skill score for the classification of the exceedance of a quantile
-    threshold by a set of PCA + KMeans clusters.
-
-    For example, if 'targets' is a precipitation field and q = 0.95, the score will
-    measure how well the clusters predict the exceedance of the 95th percentile of
-    precipitation (the quantile is computed separately for each grid point).
-
-    :param pca_predictor: The PCA + KMeans predictor used to compute clusters
-    :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-        # latitudes, # longitudes)
-    :param targets: The target data for all time steps. Shape (# times, ...)
-    :param q: The quantile threshold, between 0 and 1.
-    :param larger_than: If True, the exceedance is defined as targets > quantile. If
-        False, the exceedance is defined as targets < quantile.
-    :return: Brier skill score for the classification of the exceedance of the
-        quantile threshold by the clusters.
-    """
-    target_quantile = np.nanquantile(targets, q=q, axis=0)
-    exceedance = targets > target_quantile if larger_than else targets < target_quantile
-    exceedance = exceedance.astype(int)
-    one_hot_exceedance = np.stack([1 - exceedance, exceedance], axis=-1)
-
-    return compute_BSS_clusters_target_pca(
-        pca_predictor=pca_predictor, inputs=inputs, targets_categorical=one_hot_exceedance
-    )
-
-
-def compute_BSS_quantile_prediction(
-    vae: VAEPredictor, inputs: np.ndarray, targets: np.ndarray, N: int
-) -> float:
-    """
-    Compute the Brier skill score for the classification of the quantile indices of a
-    target variable by a set of CMM-VAE clusters.
-
-    For example, if 'targets' is a precipitation field and N = 4, the score will measure
-    how well the clusters predict the quartile of precipitation at each grid point (the
-    quantiles are computed separately for each grid point).
-
-    :param vae: The CMM-VAE used to compute clusters
-    :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-        # latitudes, # longitudes)
-    :param targets: The target data for all time steps. Shape (# times, ...)
-    :param N: The number of quantiles to consider.
-    :return: Brier skill score for the classification of the quantile indices of the
-        target variable by the clusters.
-    """
-    one_hot_quantiles = _compute_one_hot_quantiles(x=targets, N=N)
-
-    return compute_BSS_clusters_target(
-        vae=vae, inputs=inputs, targets_categorical=one_hot_quantiles
-    )
-
-def compute_BSS_quantile_prediction_pca(
-    pca_predictor: PCAKmeansPredictor, inputs: np.ndarray, targets: np.ndarray, N: int
-) -> float:
-    """
-    Compute the Brier skill score for the classification of the quantile indices of a
-    target variable by a set of clusters predicted by the PCA + KMeans predictor.
-
-    For example, if 'targets' is a precipitation field and N = 4, the score will measure
-    how well the clusters predict the quartile of precipitation at each grid point (the
-    quantiles are computed separately for each grid point).
-
-    :param pca_predictor: The PCA + KMeans predictor used to compute clusters
-    :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-        # latitudes, # longitudes)
-    :param targets: The target data for all time steps. Shape (# times, ...)
-    :param N: The number of quantiles to consider.
-    :return: Brier skill score for the classification of the quantile indices of the
-        target variable by the clusters.
-    """
-    one_hot_quantiles = _compute_one_hot_quantiles(x=targets, N=N)
-
-    return compute_BSS_clusters_target_pca(
-        pca_predictor=pca_predictor, inputs=inputs, targets_categorical=one_hot_quantiles
-    )
-
+    return cluster_probs_testing, targets_categorical_testing, targets_categorical_training, conditional_probs
 
 def compute_BSS_clusters_target(
-    vae: VAEPredictor, inputs: np.ndarray, targets_categorical: np.ndarray
+    cluster_probs: np.ndarray, targets_categorical: np.ndarray, targets_categorical_climatology: np.ndarray = None, conditional_probs: np.ndarray = None
 ) -> float:
     """
     Compute the Brier skill score for the classification of a binary or categorical
-    target variable by a set of CMM-VAE clusters.
+    target variable by a set of Z500 clusters.
 
     This is done probabilistically: for each time step, the predicted cluster
     probabilities are combined with the conditional probabilities of the target variable
@@ -131,75 +57,79 @@ def compute_BSS_clusters_target(
     score is then computed by comparing the Brier score of the forecast to that of the
     climatological baseline.
 
-    :param vae: The CMM-VAE used to compute clusters
-    :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-        # latitudes, # longitudes)
+    :param cluster_probs: The predicted cluster probabilities for all time steps, with
+        shape (n_times, n_clusters).
     :param targets_categorical: The target data for all time steps. Must be categorical
         or binary (e.g., exceedance of a precipitation threshold). Shape (# times, ...,
         # classes), with the last dimension being a one-hot encoding of the class. All
         other dimensions will be pooled together for the calculation of the score.
+    :param targets_categorical_climatology: Optional, probabilities for training data of the
+        target variable. Shape (#times, # classes,). If not provided, these will be computed 
+        from the targets_categorical.
+    :param conditional_probs: Optional pre-computed conditional probabilities of the
+        target variable given each cluster, with shape (n_clusters, n_spatial * n_classes). 
+        If not provided, these will be computed from the inputs and targets.
     :return: Brier skill score for the classification of the target variable by the
              clusters.
     """
-    cluster_probs = predict_clusters(vae=vae, inputs=inputs)
-
     n_times = targets_categorical.shape[0]
     n_classes = targets_categorical.shape[-1]
 
     targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
+    targets_flat = targets_reshaped.reshape(n_times, -1)
+
+    if targets_categorical_climatology is None:
+        targets_categorical_climatology = targets_categorical
+
+    if conditional_probs is None:
+        conditional_probs = compute_conditional_probabilities(
+            cluster_probs=cluster_probs, targets_categorical=targets_categorical
+        )
+
     forecast = _compute_probabilistic_forecast(
-        targets=targets_reshaped.astype(np.float32),
         cluster_probs=cluster_probs.astype(np.float32),
-    )
-    baseline = targets_reshaped.mean(axis=0)
+        conditional_probs=conditional_probs.astype(np.float32)
+    ).reshape(*targets_reshaped.shape)
 
-    return _compute_brier_skill_score(
-        y_true=targets_reshaped, y_prob=forecast, y_prob_ref=baseline
+    return compute_brier_skill_score(
+        y_true=targets_reshaped, y_prob=forecast, y_prob_ref=np.mean(targets_categorical_climatology, axis=0)
     )
 
-def compute_BSS_clusters_target_pca(
-    pca_predictor: PCAKmeansPredictor, inputs: np.ndarray, targets_categorical: np.ndarray
-) -> float:
+
+def compute_conditional_probabilities(
+    cluster_probs: np.ndarray, targets_categorical: np.ndarray
+) -> np.ndarray:
     """
-    Compute the Brier skill score for the classification of a binary or categorical
-    target variable by a set of clusters predicted by the PCA + KMeans predictor.
+    Compute the conditional probabilities of the target variable given each Z500 cluster.
+    This calculates P(target=t | cluster=c) for all t and c using Bayes' theorem:
+    P(target=t | cluster=c) = P(cluster=c and target=t)/ P(cluster=c).
 
-    This is done probabilistically: for each time step, the predicted cluster
-    probabilities are combined with the conditional probabilities of the target variable
-    given each cluster to produce a forecast of the target variable. The Brier skill
-    score is then computed by comparing the Brier score of the forecast to that of the
-    climatological baseline.
+    To calculate P(cluster=c and target=t), we simpy calculate the average of
+    P(cluster=c) on days when target=t. This is what the third line of the function does,
+    leveraging the fact that the targets are one-hot encoded.
 
-    :param pca_predictor: The PCA + KMeans predictor used to compute clusters
-    :param inputs: The input data (e.g., z500) for all time steps. Shape (# times,
-        # latitudes, # longitudes)
+    :param cluster_probs: The predicted cluster probabilities for all time steps, with
+        shape (n_times, n_clusters).
     :param targets_categorical: The target data for all time steps. Must be categorical
         or binary (e.g., exceedance of a precipitation threshold). Shape (# times, ...,
-        # classes), with the last dimension being a one-hot encoding of the class. All
-        other dimensions will be pooled together for the calculation of the score.
-    :return: Brier skill score for the classification of the target variable by the
-             clusters.
+        # classes), with the last dimension being a one-hot encoding of the class.
+    :return: The conditional probabilities of the target variable given each cluster,
+        with shape (n_clusters, n_spatial * n_classes). n_spatial is the product of the 
+        "..." dimensions of targets_categorical.
     """
-    n_times = inputs.shape[0]
-    n_classes = targets_categorical.shape[1]
+    n_times = targets_categorical.shape[0]
+    targets_flat = targets_categorical.reshape(n_times, -1)
 
-    cluster_probs = pca_predictor.clusters(x=inputs).transpose(1, 0)  
-    cluster_probs = cluster_probs.reshape(n_times, -1)
+    joint_weights = cluster_probs.T @ targets_flat / targets_flat.shape[0]
+    mean_cluster_probs = cluster_probs.mean(axis=0)[:, np.newaxis]
 
+    return joint_weights / np.maximum(mean_cluster_probs, EPSILON)
 
-    targets_reshaped = targets_categorical.reshape(n_times, -1, n_classes)
-
-    forecast = _compute_probabilistic_forecast(targets=targets_reshaped, cluster_probs=cluster_probs)
-
-    baseline = targets_reshaped.mean(axis=0)
-
-    return _compute_brier_skill_score(
-        y_true=targets_reshaped, y_prob=forecast, y_prob_ref=baseline
-    )
 
 
 def _compute_probabilistic_forecast(
-    targets: np.ndarray, cluster_probs: np.ndarray
+    cluster_probs: np.ndarray, 
+    conditional_probs: np.ndarray,
 ) -> np.ndarray:
     """
     Compute target probabilities across space and classes by combining the predicted
@@ -207,51 +137,17 @@ def _compute_probabilistic_forecast(
     given each cluster. This uses the law of total probability, i.e.,
     P(target) = sum_c P(target | cluster=c) * P(cluster=c).
 
-    :param targets: The target data for all time steps. Must be a one-hot encoding of
-    target classes, with shape (n_times, n_spatial, n_classes).
     :param cluster_probs: The predicted cluster probabilities for all time steps, with
     shape (n_times, n_clusters).
+    :param conditional_probs: The conditional probabilities of the target variable
+        given each cluster, with shape (n_clusters, n_spatial * n_classes).
     :return: The forecasted target probabilities for all time steps, with shape
-    (n_times, n_spatial, n_classes).
+    (n_times, n_spatial * n_classes).
     """
-    n_times, n_spatial, n_classes = targets.shape
-    targets_flat = targets.reshape(n_times, -1)
-
-    conditional_probs = _compute_conditional_probabilities(
-        targets_flat=targets_flat, cluster_probs=cluster_probs
-    )
-
     # (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
     forecast_flat = cluster_probs @ conditional_probs
 
-    return forecast_flat.reshape(n_times, n_spatial, n_classes)
-
-
-def _compute_conditional_probabilities(
-    targets_flat: np.ndarray, cluster_probs: np.ndarray
-) -> np.ndarray:
-    """
-    Apply Bayes' theorem to calculate the conditional target probabilities given a
-    cluster assignment. This calculates the term
-    P(target=t | cluster=c) = P(cluster=c and target=t)/ P(cluster=c)
-
-    To calculate P(cluster=c and target=t), we simpy calculate the average of
-    P(cluster=c) on days when target=t. This is what the first line of the function does,
-    leveraging the fact that the targets are one-hot encoded.
-
-    :param targets_flat: The target data for all time steps, flattened across all
-        spatial dimensions. Must be a one-hot encoding of target classes, with shape
-        (n_times, n_spatial * n_classes).
-    :param cluster_probs: The predicted cluster probabilities for all time steps, with
-        shape (n_times, n_clusters).
-    :return: The conditional target probabilities given each cluster, with shape
-        (n_clusters, n_spatial * n_classes).
-
-    """
-    joint_weights = cluster_probs.T @ targets_flat / targets_flat.shape[0]
-    mean_cluster_probs = cluster_probs.mean(axis=0)[:, np.newaxis]
-
-    return joint_weights / np.maximum(mean_cluster_probs, EPSILON)
+    return forecast_flat
 
 
 def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
@@ -265,7 +161,7 @@ def _compute_brier_score(y_true: np.ndarray, y_prob: np.ndarray) -> float:
     return np.mean(np.sum((y_prob - y_true) ** 2, axis=-1))
 
 
-def _compute_brier_skill_score(
+def compute_brier_skill_score(
     y_true: np.ndarray, y_prob: np.ndarray, y_prob_ref: np.ndarray
 ) -> float:
     """

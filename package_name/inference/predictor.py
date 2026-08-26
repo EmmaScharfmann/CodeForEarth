@@ -17,7 +17,9 @@ class VAEPredictor:
         cfg: VAEConfig,
     ) -> None:
         self.cfg = cfg
-        self._encoder = EncoderBuilder(construct_encoder_config(cfg=self.cfg), training=False).build()
+        self._encoder = EncoderBuilder(
+            construct_encoder_config(cfg=self.cfg), training=False
+        ).build()
         self._decoder = DecoderBuilder(construct_decoder_config(cfg=self.cfg)).build()
         self._model = VAEModel(
             encoder=self._encoder,

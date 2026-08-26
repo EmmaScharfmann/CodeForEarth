@@ -12,12 +12,40 @@ from sklearn.preprocessing import StandardScaler
 import pandas as pd
 import country_converter as coco
 import plotly.express as px
+from typing import Sequence
+from package_name.constants import EPSILON
+from enum import Enum
+
+class GeographicalFilter(Enum):
+    """Enum for supported geographical filters."""
+    MEDITERRANEAN = "mediterranean"
+    MOROCCO = "morocco"
+    LARGER_MEDITERRANEAN = "larger mediterranean"
+    ATLANTIC = "atlantic"
+    NORTH_ATLANTIC = "north atlantic"
+    CCA = "cca"
+    NEW_ATLANTIC = "new atlantic"
+    EXTENDED_EUROPE = "extended europe"
+    GLOBAL = "global"
+ 
+ 
+GEOGRAPHICAL_BOUNDS = {
+    GeographicalFilter.MEDITERRANEAN: ((25, 50), (-20, 45)),
+    GeographicalFilter.MOROCCO: ((30, 36), (-11, 0)),
+    GeographicalFilter.LARGER_MEDITERRANEAN: ((25, 60), (-30, 45)),
+    GeographicalFilter.ATLANTIC: ((25, 80), (-50, 30)),
+    GeographicalFilter.NORTH_ATLANTIC: ((50, 65), (-60, 0)),
+    GeographicalFilter.CCA: ((20, 50), (-30, 20)),
+    GeographicalFilter.NEW_ATLANTIC: ((20, 80), (-50, 30)),
+    GeographicalFilter.EXTENDED_EUROPE: ((25, 80), (-20, 40)),
+    GeographicalFilter.GLOBAL: (None, None),
+}
 
 def cluster_country_wise(
     df_in: pd.DataFrame,
     cluster_number: int,
     standardize: bool = True,
-) -> tuple[pd.DataFrame, pd.DataFrame, KMeans]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Preprocesses country-wise data (impute, optional scale) and applies KMeans clustering.
 
     :param df_in:           The country-wise dataframe to be clustered (only
@@ -29,7 +57,6 @@ def cluster_country_wise(
                             1. Dataframe of preprocessed features (imputed or
                             imputed+scaled).
                             2. Dataframe with the cluster labels for each day.
-                            3. The fitted KMeans model.
     """
     X_clean = SimpleImputer(strategy="mean").fit_transform(df_in)
 
@@ -42,6 +69,7 @@ def cluster_country_wise(
     df_norm = pd.DataFrame(X_clean, columns=df_in.columns, index=df_in.index)
 
     return df_norm, df_labels
+
 
 def calc_country_wise_cluster_means(
     country_data: pd.DataFrame,
@@ -118,10 +146,10 @@ def plot_country_wise_cluster_means(
         ),
     )
     if save_path:
-        fig.write_image(save_path, scale=3)
+        plt.savefig(save_path, dpi=300)
 
     else:
-        fig.show(config={'staticPlot': True, 'displayModeBar': False, 'scrollZoom': False})
+        fig.show()
 
 
 def filter_dataset(
@@ -151,6 +179,146 @@ def filter_dataset(
         latitude=slice(latitude[0], latitude[1]),
         longitude=slice(longitude[0], longitude[1]),
     )
+
+def _filter_dataset(
+    dataset: xr.Dataset,
+    geographical_filter: GeographicalFilter,
+) -> xr.Dataset:
+    """
+    Filter a dataset by latitude and longitude.
+    
+    :param dataset:              The dataset to be filtered.
+    :param geographical_filter:  The geographical filter to be applied.
+    :return:                     The filtered dataset.
+    """
+    bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
+    
+    dataset = dataset.sortby("latitude")
+    dataset = dataset.sortby("longitude")
+    
+    if geographical_filter == GeographicalFilter.GLOBAL:
+        return dataset
+
+    bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
+    return dataset.sel(
+        latitude=slice(bounds[0][0], bounds[0][1]),
+        longitude=slice(bounds[1][0], bounds[1][1]),
+    )
+
+def _generate_spatial_coordinates(
+    lower_bound: float,
+    upper_bound: float,
+    resolution: float,
+) -> np.ndarray:
+    """Generate regularly spaced coordinates inside two bounds."""
+    if resolution <= 0:
+        raise ValueError("Spatial resolution must be greater than zero.")
+
+    lower_bound = min(lower_bound, upper_bound)
+    upper_bound = max(lower_bound, upper_bound)
+
+    number_of_steps = int(
+        np.floor(
+            (upper_bound - lower_bound) / resolution + EPSILON
+        )
+    )
+
+    coordinates = (
+        lower_bound
+        + np.arange(number_of_steps + 1) * resolution
+    )
+    return np.round(coordinates, decimals=10)
+
+def _change_spatial_resolution(
+    dataset: xr.Dataset | xr.DataArray,
+    geographical_filter: GeographicalFilter,
+    spatial_resolution: float,
+    interpolation_method: str = "nearest",
+) -> xr.Dataset | xr.DataArray:
+    """
+    Filter and interpolate data to a requested spatial resolution.
+    
+    dataset: dataset to be filtered and interpolated
+    geographical_filter: name of the predefined geographical region to retain.
+    spatial_resolution: requested spatial resolution in degrees.
+    interpolation_method: method to use for interpolation. Default is 'nearest'.
+    
+    returns: filtered and interpolated dataset
+    """
+
+    if spatial_resolution <= 0:
+        raise ValueError("Spatial resolution must be greater than zero.")
+
+    dataset = _filter_dataset(
+        dataset=dataset,
+        geographical_filter=geographical_filter,
+    )
+
+    if geographical_filter == GeographicalFilter.GLOBAL:
+        latitude_bounds, longitude_bounds = _get_avaialble_coordinate_bounds(dataset)
+    else:
+        latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[
+            geographical_filter
+        ]
+
+    target_lats = _generate_spatial_coordinates(
+        lower_bound=min(latitude_bounds),
+        upper_bound=max(latitude_bounds),
+        resolution=spatial_resolution,
+    )
+
+    target_lons = _generate_spatial_coordinates(
+        lower_bound=min(longitude_bounds),
+        upper_bound=max(longitude_bounds),
+        resolution=spatial_resolution,
+    )
+
+    current_lats = np.asarray(dataset.latitude.values)
+    current_lons = np.asarray(dataset.longitude.values)
+
+    latitude_matches = (
+        len(current_lats) == len(target_lats)
+        and np.allclose(current_lats, target_lats)
+    )
+
+    longitude_matches = (
+        len(current_lons) == len(target_lons)
+        and np.allclose(current_lons, target_lons)
+    )
+
+    if latitude_matches is True and longitude_matches is True:
+        return dataset
+
+    return dataset.interp(
+        latitude=target_lats,
+        longitude=target_lons,
+        method=interpolation_method,
+        kwargs={"fill_value": "extrapolate"},
+    )
+
+def _get_avaialble_coordinate_bounds(
+    dataset: xr.Dataset | xr.DataArray,
+) -> tuple[tuple[float, float], tuple[float, float]]:
+    """For the global region, use the available coordinate bounds.
+    """
+    latitude_bounds = (
+        float(dataset.latitude.min()),
+        float(dataset.latitude.max()),
+    )
+    longitude_bounds = (
+        float(dataset.longitude.min()),
+        float(dataset.longitude.max()),
+    )
+    return latitude_bounds, longitude_bounds
+
+def _calculate_anomalies(
+    x: xr.Dataset | xr.DataArray,
+    dim: str | Sequence[str] = "time",
+) -> xr.Dataset | xr.DataArray:
+    """
+    Calculate anomalies by removing the mean over one or more dimensions.
+    """
+    return x - x.mean(dim=dim)
 
 
 def calculate_anomalies(x: xr.Dataset) -> xr.Dataset:
@@ -245,18 +413,14 @@ def reshape_data_for_clustering(
     Reshape a 3D spatiotemporal data array into a 2D array suitable
     for clustering algorithms.
 
-    :param xarray_data: The input data is assumed to have dimensions ``(time, latitude, longitude)`` or (time, members, latitude, longitude) (or equivalent).
+    :param xarray_data: The input data is assumed to have dimensions ``(time, latitude, longitude)`` (or equivalent).
     :return:            Two-dimensional array of shape ``(n_time, n_grid_points)``, where each row corresponds to a time step and each column corresponds to a spatial grid point.
     """
     data = xarray_data.values
 
-    if len(data.shape) == 3:
-        nt, ny, nx = data.shape
-        data = np.reshape(data, [nt, ny * nx])
-
-    else:
-        nt, nm, ny, nx = data.shape
-        data = np.reshape(data, [nt, nm, ny * nx])
+    nt, ny, nx = data.shape
+    data = np.reshape(data, [nt, ny * nx])
+    data = np.reshape(data, [nt, ny * nx])
 
     return data
 
@@ -362,7 +526,6 @@ def plot_all_losses(history: tf.keras.callbacks.History):
     plt.legend()
     plt.show()
 
-'''
 
 def preprocess_forecast_data(
     dataset: xr.Dataset,
@@ -431,4 +594,3 @@ def preprocess_forecast_data(
     dataset.load()
 
     return dataset
-'''

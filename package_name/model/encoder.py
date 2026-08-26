@@ -85,8 +85,15 @@ class EncoderBuilder:
         mu = Reshape(target_shape=(cfg.cluster_number, cfg.latent_dim), name="mu")(
             mu_vector
         )
-        pi = Dense(cfg.cluster_number, activation="softmax", name="pi", kernel_initializer="glorot_uniform", bias_initializer="zeros",
-        )(dummy_input) #changed
+        pi = Dense(
+            cfg.cluster_number,
+            activation="softmax",
+            name="pi",
+            kernel_initializer="glorot_uniform",
+            bias_initializer="zeros",
+        )(
+            dummy_input
+        )  # changed
 
         return {"mu": mu, "pi": pi}
 
@@ -96,12 +103,14 @@ class EncoderBuilder:
         """Build the cluster outputs, either directly from the input variable (cluster_pred) or from the target variable (target_cluster_pred)."""
         cfg = self.cfg
 
-        clusters_pred = Dense(cfg.cluster_number, activation="softmax", name="clusters_pred")(
-            clusters_input
-        )
+        clusters_pred = Dense(
+            cfg.cluster_number, activation="softmax", name="clusters_pred"
+        )(clusters_input)
         target_pred_input_dropped = Dropout(0.3)(clusters_input, training=self.training)
         target_pred = Dense(
-            cfg.pr_cluster_number, activation="softmax", name="target_pred", #kernel_regularizer=l2(0.01),
+            cfg.pr_cluster_number,
+            activation="softmax",
+            name="target_pred",  # kernel_regularizer=l2(0.01),
         )(target_pred_input_dropped)
 
         clusters_pred_from_target = Dense(

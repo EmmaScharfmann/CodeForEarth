@@ -75,6 +75,7 @@ class EncoderOutput:
 class DecoderOutput:
     x_recon: tf.Tensor  # (batch, *input_shape)
 
+
 @dataclass
 class LossFactorsConfig:
     vae_reconstruction_loss_factor: float = 1.0
@@ -83,6 +84,7 @@ class LossFactorsConfig:
     cluster_target_regularisation_loss_factor: float = 1.0
     mixture_regularization_loss_factor: float = 1.0
     dirichlet_loss_factor: float = 1.0
+
 
 @dataclass
 class Loss(LossFactorsConfig):
@@ -98,7 +100,8 @@ class Loss(LossFactorsConfig):
             self.vae_reconstruction * self.vae_reconstruction_loss_factor
             + self.vae_regularisation * self.vae_regularisation_loss_factor
             + self.target_prediction * self.target_prediction_loss_factor
-            + self.cluster_target_regularisation * self.cluster_target_regularisation_loss_factor
+            + self.cluster_target_regularisation
+            * self.cluster_target_regularisation_loss_factor
             + self.mixture_regularization * self.mixture_regularization_loss_factor
         )
 
@@ -112,12 +115,10 @@ class Loss(LossFactorsConfig):
         }
 
 
-
 @dataclass
 class GaussianDistribution:
     mean: tf.Tensor
     log_var: tf.Tensor
-
 
 
 def format_encoder_output_as_object(encoder_output: dict) -> EncoderOutput:
