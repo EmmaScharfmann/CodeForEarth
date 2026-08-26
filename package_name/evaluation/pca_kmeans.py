@@ -174,18 +174,31 @@ class PCAKmeansPredictor:
         Predict cluster assignments and probabilities for new data using trained models.
         New data must have the same number of features as training data.
 
-        :param x:               ndarray of shape (n_samples, n_features). New input data matrix
+        :param x:               ndarray of shape (n_samples, n_features) or (n_samples, n_members, n_features). New input data matrix
         :return:                cluster_probs: Array of shape (n_clusters, n_samples), which contains
                                 the probability of each sample of belonging to each cluster.
         """
         models = self.model
         scaler = models.scaler
-        x_scaled = scaler.transform(X=x)
 
-        pca = models.pca
-        x_pca = pca.transform(X=x_scaled)
+        if len(x.shape) == 2:
+            x_scaled = scaler.transform(X=x)
+            x_pca = models.pca.transform(X=x_scaled)
+            cluster_probs = _get_probabilities_from_kmeans(
+                x=x_pca, kmeans=models.kmeans
+            )
 
-        cluster_probs = _get_probabilities_from_kmeans(x=x_pca, kmeans=models.kmeans)
+        else:
+            cluster_probs_mem = np.zeros(
+                (models.kmeans.n_clusters, x.shape[0], x.shape[1])
+            )
+            for member in range(x.shape[1]):
+                x_scaled = scaler.transform(X=x[:, member, :])
+                x_pca = models.pca.transform(X=x_scaled)
+                cluster_probs_mem[:, :, member] = _get_probabilities_from_kmeans(
+                    x=x_pca, kmeans=models.kmeans
+                )
+            cluster_probs = np.mean(cluster_probs_mem, axis=-1)
 
         return cluster_probs
 

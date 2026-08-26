@@ -45,13 +45,19 @@ def train_val_split(
 
 def flatten_input(X: np.ndarray) -> np.ndarray:
     """
-    Flatten the two last dimensions of a 3-dimensional input array into a single dimension.
+    Flatten the two last dimensions of a 3-dimensional or 4-dimensional input array into a single dimension.
 
-    :param X:   The 3-dimensional input array to flatten.
-    :return:    The flattened, 2-dimensional array.
+    :param X:   The 3-dimensional or 4-dimensional input array to flatten.
+    :return:    The flattened, 2-dimensional or 3-dimensional array.
     """
-    nt, ny, nx = X.shape
-    return np.reshape(X, (nt, ny * nx))
+    if X.ndim == 3:
+        nt, ny, nx = X.shape
+        return np.reshape(X, (nt, ny * nx))
+    elif X.ndim == 4:
+        nt, nm, ny, nx = X.shape
+        return np.reshape(X, (nt, nm, ny * nx))
+    else:
+        raise ValueError("Input array must be 3 or 4 dimensional.")
 
 
 def unflatten_input(X: np.ndarray, ny: int, nx: int) -> np.ndarray:
