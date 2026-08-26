@@ -180,18 +180,24 @@ class PCAKmeansPredictor:
         """
         models = self.model
         scaler = models.scaler
-        
+
         if len(x.shape) == 2:
             x_scaled = scaler.transform(X=x)
             x_pca = models.pca.transform(X=x_scaled)
-            cluster_probs = _get_probabilities_from_kmeans(x=x_pca, kmeans=models.kmeans)
-        
+            cluster_probs = _get_probabilities_from_kmeans(
+                x=x_pca, kmeans=models.kmeans
+            )
+
         else:
-            cluster_probs_mem = np.zeros((models.kmeans.n_clusters, x.shape[0], x.shape[1]))
+            cluster_probs_mem = np.zeros(
+                (models.kmeans.n_clusters, x.shape[0], x.shape[1])
+            )
             for member in range(x.shape[1]):
                 x_scaled = scaler.transform(X=x[:, member, :])
                 x_pca = models.pca.transform(X=x_scaled)
-                cluster_probs_mem[:, :,member] = _get_probabilities_from_kmeans(x=x_pca, kmeans=models.kmeans)
+                cluster_probs_mem[:, :, member] = _get_probabilities_from_kmeans(
+                    x=x_pca, kmeans=models.kmeans
+                )
             cluster_probs = np.mean(cluster_probs_mem, axis=-1)
 
         return cluster_probs

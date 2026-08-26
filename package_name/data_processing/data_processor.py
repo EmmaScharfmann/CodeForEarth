@@ -59,6 +59,7 @@ def flatten_input(X: np.ndarray) -> np.ndarray:
     else:
         raise ValueError("Input array must be 3 or 4 dimensional.")
 
+
 def unflatten_input(X: np.ndarray, ny: int, nx: int) -> np.ndarray:
     """
     Reshape a 2-dimensional input array into a 3-dimensional array.

@@ -1,6 +1,7 @@
 import numpy as np
 from package_name.constants import EPSILON
 
+
 def compute_inputs_to_calc_quantile_exceedance(
     cluster_probs_testing: np.ndarray,
     targets_testing: np.ndarray,
@@ -29,23 +30,45 @@ def compute_inputs_to_calc_quantile_exceedance(
         targets_training = targets_testing
 
     target_quantile = np.nanquantile(targets_training, q=q, axis=0)
-    exceedance_testing = targets_testing > target_quantile if larger_than else targets_testing < target_quantile
+    exceedance_testing = (
+        targets_testing > target_quantile
+        if larger_than
+        else targets_testing < target_quantile
+    )
     exceedance_testing = exceedance_testing.astype(int)
 
-    exceedance_training = targets_training > target_quantile if larger_than else targets_training < target_quantile
+    exceedance_training = (
+        targets_training > target_quantile
+        if larger_than
+        else targets_training < target_quantile
+    )
     exceedance_training = exceedance_training.astype(int)
 
-    targets_categorical_testing = np.stack([1 - exceedance_testing, exceedance_testing], axis=-1)
-    targets_categorical_training = np.stack([1 - exceedance_training, exceedance_training], axis=-1)
-
-    conditional_probs = compute_conditional_probabilities(
-        cluster_probs=cluster_probs_training, targets_categorical=targets_categorical_training
+    targets_categorical_testing = np.stack(
+        [1 - exceedance_testing, exceedance_testing], axis=-1
+    )
+    targets_categorical_training = np.stack(
+        [1 - exceedance_training, exceedance_training], axis=-1
     )
 
-    return cluster_probs_testing, targets_categorical_testing, targets_categorical_training, conditional_probs
+    conditional_probs = compute_conditional_probabilities(
+        cluster_probs=cluster_probs_training,
+        targets_categorical=targets_categorical_training,
+    )
+
+    return (
+        cluster_probs_testing,
+        targets_categorical_testing,
+        targets_categorical_training,
+        conditional_probs,
+    )
+
 
 def compute_BSS_clusters_target(
-    cluster_probs: np.ndarray, targets_categorical: np.ndarray, targets_categorical_climatology: np.ndarray = None, conditional_probs: np.ndarray = None
+    cluster_probs: np.ndarray,
+    targets_categorical: np.ndarray,
+    targets_categorical_climatology: np.ndarray = None,
+    conditional_probs: np.ndarray = None,
 ) -> float:
     """
     Compute the Brier skill score for the classification of a binary or categorical
@@ -64,10 +87,10 @@ def compute_BSS_clusters_target(
         # classes), with the last dimension being a one-hot encoding of the class. All
         other dimensions will be pooled together for the calculation of the score.
     :param targets_categorical_climatology: Optional, probabilities for training data of the
-        target variable. Shape (#times, # classes,). If not provided, these will be computed 
+        target variable. Shape (#times, # classes,). If not provided, these will be computed
         from the targets_categorical.
     :param conditional_probs: Optional pre-computed conditional probabilities of the
-        target variable given each cluster, with shape (n_clusters, n_spatial * n_classes). 
+        target variable given each cluster, with shape (n_clusters, n_spatial * n_classes).
         If not provided, these will be computed from the inputs and targets.
     :return: Brier skill score for the classification of the target variable by the
              clusters.
@@ -88,11 +111,13 @@ def compute_BSS_clusters_target(
 
     forecast = _compute_probabilistic_forecast(
         cluster_probs=cluster_probs.astype(np.float32),
-        conditional_probs=conditional_probs.astype(np.float32)
+        conditional_probs=conditional_probs.astype(np.float32),
     ).reshape(*targets_reshaped.shape)
 
     return compute_brier_skill_score(
-        y_true=targets_reshaped, y_prob=forecast, y_prob_ref=np.mean(targets_categorical_climatology, axis=0)
+        y_true=targets_reshaped,
+        y_prob=forecast,
+        y_prob_ref=np.mean(targets_categorical_climatology, axis=0),
     )
 
 
@@ -114,7 +139,7 @@ def compute_conditional_probabilities(
         or binary (e.g., exceedance of a precipitation threshold). Shape (# times, ...,
         # classes), with the last dimension being a one-hot encoding of the class.
     :return: The conditional probabilities of the target variable given each cluster,
-        with shape (n_clusters, n_spatial * n_classes). n_spatial is the product of the 
+        with shape (n_clusters, n_spatial * n_classes). n_spatial is the product of the
         "..." dimensions of targets_categorical.
     """
     n_times = targets_categorical.shape[0]
@@ -126,9 +151,8 @@ def compute_conditional_probabilities(
     return joint_weights / np.maximum(mean_cluster_probs, EPSILON)
 
 
-
 def _compute_probabilistic_forecast(
-    cluster_probs: np.ndarray, 
+    cluster_probs: np.ndarray,
     conditional_probs: np.ndarray,
 ) -> np.ndarray:
     """
@@ -214,6 +238,7 @@ def _compute_one_hot_quantiles(x: np.ndarray, N: int) -> np.ndarray:
 
     return one_hot_quantiles.reshape(*original_shape, N)
 
+
 def calculate_forecast_brier_skill_score(
     y_true_labels: np.ndarray,
     y_forecast_prob: np.ndarray,
@@ -222,12 +247,12 @@ def calculate_forecast_brier_skill_score(
     """
     Calculate forecast Brier score, climatological Brier score,
     and Brier skill score.
-    
+
     y_true_labels: Observed integer cluster labels with shape (n_samples,).
     y_forecast_prob: Forecast probabilities with shape (n_samples, n_classes).
     n_classes: Number of clusters. Inferred from y_forecast_prob when omitted.
-    
-    returns: Tuple of (bs_forecast, bs_climatology, bss): 
+
+    returns: Tuple of (bs_forecast, bs_climatology, bss):
     bs_forecast: Brier score of the forecast.
     bs_climatology: Brier score of the climatological forecast.
     bss: Brier skill score relative to climatology.
@@ -243,10 +268,7 @@ def calculate_forecast_brier_skill_score(
     )
 
     if y_forecast_prob.ndim != 2:
-        raise ValueError(
-            "y_forecast_prob must have shape "
-            "(n_samples, n_classes)."
-        )
+        raise ValueError("y_forecast_prob must have shape " "(n_samples, n_classes).")
 
     if n_classes is None:
         n_classes = y_forecast_prob.shape[1]
@@ -263,21 +285,14 @@ def calculate_forecast_brier_skill_score(
             "the same number of samples."
         )
 
-    if np.any(
-        (y_true_labels < 0)
-        | (y_true_labels >= n_classes)
-    ):
-        raise ValueError(
-            f"Labels must be between 0 and {n_classes - 1}."
-        )
+    if np.any((y_true_labels < 0) | (y_true_labels >= n_classes)):
+        raise ValueError(f"Labels must be between 0 and {n_classes - 1}.")
 
     if not np.allclose(
         y_forecast_prob.sum(axis=1),
         1.0,
     ):
-        raise ValueError(
-            "Each row of y_forecast_prob must sum to one."
-        )
+        raise ValueError("Each row of y_forecast_prob must sum to one.")
 
     y_true_one_hot = np.eye(
         n_classes,
@@ -286,16 +301,12 @@ def calculate_forecast_brier_skill_score(
 
     if len(y_true_labels) == 0:
         raise ValueError(
-            "y_true_labels and y_forecast_prob must contain "
-            "at least one sample."
+            "y_true_labels and y_forecast_prob must contain " "at least one sample."
         )
-    climatology_prob = (
-        np.bincount(
-            y_true_labels,
-            minlength=n_classes,
-        )
-        / len(y_true_labels)
-    )
+    climatology_prob = np.bincount(
+        y_true_labels,
+        minlength=n_classes,
+    ) / len(y_true_labels)
 
     y_climatology_prob = np.broadcast_to(
         climatology_prob,

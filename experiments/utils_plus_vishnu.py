@@ -16,8 +16,10 @@ from typing import Sequence
 from package_name.constants import EPSILON
 from enum import Enum
 
+
 class GeographicalFilter(Enum):
     """Enum for supported geographical filters."""
+
     MEDITERRANEAN = "mediterranean"
     MOROCCO = "morocco"
     LARGER_MEDITERRANEAN = "larger mediterranean"
@@ -27,8 +29,8 @@ class GeographicalFilter(Enum):
     NEW_ATLANTIC = "new atlantic"
     EXTENDED_EUROPE = "extended europe"
     GLOBAL = "global"
- 
- 
+
+
 GEOGRAPHICAL_BOUNDS = {
     GeographicalFilter.MEDITERRANEAN: ((25, 50), (-20, 45)),
     GeographicalFilter.MOROCCO: ((30, 36), (-11, 0)),
@@ -40,6 +42,7 @@ GEOGRAPHICAL_BOUNDS = {
     GeographicalFilter.EXTENDED_EUROPE: ((25, 80), (-20, 40)),
     GeographicalFilter.GLOBAL: (None, None),
 }
+
 
 def cluster_country_wise(
     df_in: pd.DataFrame,
@@ -180,22 +183,23 @@ def filter_dataset(
         longitude=slice(longitude[0], longitude[1]),
     )
 
+
 def _filter_dataset(
     dataset: xr.Dataset,
     geographical_filter: GeographicalFilter,
 ) -> xr.Dataset:
     """
     Filter a dataset by latitude and longitude.
-    
+
     :param dataset:              The dataset to be filtered.
     :param geographical_filter:  The geographical filter to be applied.
     :return:                     The filtered dataset.
     """
     bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
-    
+
     dataset = dataset.sortby("latitude")
     dataset = dataset.sortby("longitude")
-    
+
     if geographical_filter == GeographicalFilter.GLOBAL:
         return dataset
 
@@ -204,6 +208,7 @@ def _filter_dataset(
         latitude=slice(bounds[0][0], bounds[0][1]),
         longitude=slice(bounds[1][0], bounds[1][1]),
     )
+
 
 def _generate_spatial_coordinates(
     lower_bound: float,
@@ -217,17 +222,11 @@ def _generate_spatial_coordinates(
     lower_bound = min(lower_bound, upper_bound)
     upper_bound = max(lower_bound, upper_bound)
 
-    number_of_steps = int(
-        np.floor(
-            (upper_bound - lower_bound) / resolution + EPSILON
-        )
-    )
+    number_of_steps = int(np.floor((upper_bound - lower_bound) / resolution + EPSILON))
 
-    coordinates = (
-        lower_bound
-        + np.arange(number_of_steps + 1) * resolution
-    )
+    coordinates = lower_bound + np.arange(number_of_steps + 1) * resolution
     return np.round(coordinates, decimals=10)
+
 
 def _change_spatial_resolution(
     dataset: xr.Dataset | xr.DataArray,
@@ -237,12 +236,12 @@ def _change_spatial_resolution(
 ) -> xr.Dataset | xr.DataArray:
     """
     Filter and interpolate data to a requested spatial resolution.
-    
+
     dataset: dataset to be filtered and interpolated
     geographical_filter: name of the predefined geographical region to retain.
     spatial_resolution: requested spatial resolution in degrees.
     interpolation_method: method to use for interpolation. Default is 'nearest'.
-    
+
     returns: filtered and interpolated dataset
     """
 
@@ -257,9 +256,7 @@ def _change_spatial_resolution(
     if geographical_filter == GeographicalFilter.GLOBAL:
         latitude_bounds, longitude_bounds = _get_avaialble_coordinate_bounds(dataset)
     else:
-        latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[
-            geographical_filter
-        ]
+        latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
 
     target_lats = _generate_spatial_coordinates(
         lower_bound=min(latitude_bounds),
@@ -276,14 +273,12 @@ def _change_spatial_resolution(
     current_lats = np.asarray(dataset.latitude.values)
     current_lons = np.asarray(dataset.longitude.values)
 
-    latitude_matches = (
-        len(current_lats) == len(target_lats)
-        and np.allclose(current_lats, target_lats)
+    latitude_matches = len(current_lats) == len(target_lats) and np.allclose(
+        current_lats, target_lats
     )
 
-    longitude_matches = (
-        len(current_lons) == len(target_lons)
-        and np.allclose(current_lons, target_lons)
+    longitude_matches = len(current_lons) == len(target_lons) and np.allclose(
+        current_lons, target_lons
     )
 
     if latitude_matches is True and longitude_matches is True:
@@ -296,11 +291,11 @@ def _change_spatial_resolution(
         kwargs={"fill_value": "extrapolate"},
     )
 
+
 def _get_avaialble_coordinate_bounds(
     dataset: xr.Dataset | xr.DataArray,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """For the global region, use the available coordinate bounds.
-    """
+    """For the global region, use the available coordinate bounds."""
     latitude_bounds = (
         float(dataset.latitude.min()),
         float(dataset.latitude.max()),
@@ -310,6 +305,7 @@ def _get_avaialble_coordinate_bounds(
         float(dataset.longitude.max()),
     )
     return latitude_bounds, longitude_bounds
+
 
 def _calculate_anomalies(
     x: xr.Dataset | xr.DataArray,
@@ -539,11 +535,11 @@ def preprocess_forecast_data(
     weights: xr.DataArray | None = None,
 ) -> xr.Dataset:
     """Load and preprocess forecast data for one reference date.
-    
+
     :param dataset:               Dataset containing the forecast data (members and control merged).
     :param variable_name:         Name of the variable to extract from the dataset.
     :param multiplication_factor: Factor by which to multiply the variable values after loading.
-    :param geographical_filter:   Name of the predefined geographical region to retain. 
+    :param geographical_filter:   Name of the predefined geographical region to retain.
     :param anomalies:             If True, remove the mean for each day of the year, producing daily anomalies.
     :param normalization:         If True, divide the data by its standard deviation over the time dimension.
     :param rolling_window:        Size of the centered rolling mean window along the time dimension. If 0, no smoothing is applied.
@@ -556,9 +552,7 @@ def preprocess_forecast_data(
     dataset[variable_name] *= multiplication_factor
 
     # Convert forecast steps to daily lead times.
-    dataset = dataset.groupby(
-        dataset["step"].dt.days
-    ).mean()
+    dataset = dataset.groupby(dataset["step"].dt.days).mean()
 
     if anomalies:
         dataset = _calculate_anomalies(
@@ -568,9 +562,7 @@ def preprocess_forecast_data(
 
     if normalization:
         standard_deviation = dataset.std()
-        dataset = dataset / standard_deviation.where(
-            standard_deviation != 0
-        )
+        dataset = dataset / standard_deviation.where(standard_deviation != 0)
 
     dataset = _change_spatial_resolution(
         dataset=dataset,
@@ -578,15 +570,15 @@ def preprocess_forecast_data(
         spatial_resolution=spatial_resolution,
         interpolation_method="nearest",
     )
-    
+
     if rolling_window < 0:
-        raise ValueError(
-            "rolling_window cannot be negative."
-        )
-        
-    dataset = dataset.rolling(days=rolling_window,
-                                min_periods=1,
-                                center=True,).mean()
+        raise ValueError("rolling_window cannot be negative.")
+
+    dataset = dataset.rolling(
+        days=rolling_window,
+        min_periods=1,
+        center=True,
+    ).mean()
 
     if weights is not None:
         dataset = dataset * weights
