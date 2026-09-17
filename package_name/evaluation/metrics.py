@@ -30,26 +30,18 @@ def compute_inputs_to_calc_quantile_exceedance(
         targets_training = targets_testing
 
     target_quantile = np.nanquantile(targets_training, q=q, axis=0)
-    exceedance_testing = (
-        targets_testing > target_quantile
-        if larger_than
-        else targets_testing < target_quantile
-    )
-    exceedance_testing = exceedance_testing.astype(int)
 
-    exceedance_training = (
-        targets_training > target_quantile
-        if larger_than
-        else targets_training < target_quantile
+    exceedance_testing = _compute_exceedance(
+        targets=targets_testing, threshold=target_quantile, larger_than=larger_than
     )
-    exceedance_training = exceedance_training.astype(int)
 
-    targets_categorical_testing = np.stack(
-        [1 - exceedance_testing, exceedance_testing], axis=-1
+    exceedance_training = _compute_exceedance(
+        targets=targets_training, threshold=target_quantile, larger_than=larger_than
     )
-    targets_categorical_training = np.stack(
-        [1 - exceedance_training, exceedance_training], axis=-1
-    )
+
+    targets_categorical_testing = _convert_to_one_hot_exceedance(exceedance_testing)
+
+    targets_categorical_training = _convert_to_one_hot_exceedance(exceedance_training)
 
     conditional_probs = compute_conditional_probabilities(
         cluster_probs=cluster_probs_training,
@@ -63,12 +55,34 @@ def compute_inputs_to_calc_quantile_exceedance(
         conditional_probs,
     )
 
+def _compute_exceedance(
+    targets: np.ndarray, threshold: np.ndarray, larger_than: bool = True
+) -> np.ndarray:
+    """Check exceedance against a threshold and return as integer binary array (0 or 1).
+    
+    :param targets: The target data for all time steps. Shape (# times, ...).
+    :param threshold: The threshold to compare against. Shape (...).
+    :param larger_than: If True, the exceedance is defined as targets > threshold. If
+        False, the exceedance is defined as targets < threshold.
+    :return: A binary array indicating exceedance (0 or 1). Shape (# times, ...).
+    """
+
+    exceedance = targets > threshold if larger_than else targets < threshold
+    return exceedance.astype(int)
+
+def _convert_to_one_hot_exceedance(exceedance: np.ndarray) -> np.ndarray:
+    """Convert binary exceedance array into a 2-class one-hot categorical array [non-exceedance, exceedance].
+    
+    :param exceedance: A binary array indicating exceedance (0 or 1). Shape (# times, ...).
+    :return: A one-hot categorical array. Shape (# times, ..., 2).
+    """
+    return np.stack([1 - exceedance, exceedance], axis=-1)
 
 def compute_BSS_clusters_target(
     cluster_probs: np.ndarray,
     targets_categorical: np.ndarray,
-    targets_categorical_climatology: np.ndarray = None,
-    conditional_probs: np.ndarray = None,
+    targets_categorical_climatology: np.ndarray | None = None,
+    conditional_probs: np.ndarray | None = None,
 ) -> float:
     """
     Compute the Brier skill score for the classification of a binary or categorical
@@ -159,7 +173,8 @@ def _compute_probabilistic_forecast(
     Compute target probabilities across space and classes by combining the predicted
     cluster probabilities with the conditional probabilities of the target variable
     given each cluster. This uses the law of total probability, i.e.,
-    P(target) = sum_c P(target | cluster=c) * P(cluster=c).
+    P(target) = sum_c P(target | cluster=c) * P(cluster=c):
+    (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
 
     :param cluster_probs: The predicted cluster probabilities for all time steps, with
     shape (n_times, n_clusters).
@@ -167,8 +182,8 @@ def _compute_probabilistic_forecast(
         given each cluster, with shape (n_clusters, n_spatial * n_classes).
     :return: The forecasted target probabilities for all time steps, with shape
     (n_times, n_spatial * n_classes).
+    
     """
-    # (n_times, n_clusters) @ (n_clusters, n_spatial * n_classes) -> (n_times, n_spatial * n_classes)
     forecast_flat = cluster_probs @ conditional_probs
 
     return forecast_flat

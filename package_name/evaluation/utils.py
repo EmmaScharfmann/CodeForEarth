@@ -28,22 +28,19 @@ def compute_BSS_clusters_target_from_pca(
     :param target_categorical_climatology: Climatology data for the target categories, with shape (times, ..., classes).
     :return: The Brier skill score for the classification of the target variable by the clusters.
     """
-    X_test = flatten_input(input_test)
-    cluster_probs_testing = pca_kmeans_predictor.clusters(x=X_test)
+    cluster_probs_testing, cluster_probs_training = _get_pca_cluster_probabilities(
+        pca_kmeans_predictor=pca_kmeans_predictor,
+        input_test=input_test,
+        input_climatology=input_climatology,
+    )
 
-    if input_climatology is None or targets_categorical_climatology is None:
-        conditional_probs_targets = None
-
-    else:
-        X_train = flatten_input(input_climatology)
-        cluster_probs_training = pca_kmeans_predictor.clusters(x=X_train)
-        conditional_probs_targets = compute_conditional_probabilities(
-            cluster_probs=cluster_probs_training.T,
-            targets_categorical=targets_categorical_climatology,
-        )
+    conditional_probs_targets = _compute_optional_conditional_probs(
+        cluster_probs_training=cluster_probs_training,
+        targets_categorical_climatology=targets_categorical_climatology,
+    )
 
     return compute_BSS_clusters_target(
-        cluster_probs=cluster_probs_testing.transpose(1, 0),
+        cluster_probs=cluster_probs_testing,
         targets_categorical=targets_categorical_test,
         targets_categorical_climatology=targets_categorical_climatology,
         conditional_probs=conditional_probs_targets,
@@ -74,15 +71,11 @@ def compute_quantile_exceedance_BSS_from_pca(
     :return: The Brier skill score for the classification of the target variable by the clusters.
     """
 
-    X_test = flatten_input(input_test)
-    cluster_probs_testing = pca_kmeans_predictor.clusters(x=X_test)
-
-    if input_climatology is None or target_climatology is None:
-        cluster_probs_training = None
-        conditional_probs_targets = None
-    else:
-        X_train = flatten_input(input_climatology)
-        cluster_probs_training = pca_kmeans_predictor.clusters(x=X_train)
+    cluster_probs_testing, cluster_probs_training = _get_pca_cluster_probabilities(
+        pca_kmeans_predictor=pca_kmeans_predictor,
+        input_test=input_test,
+        input_climatology=input_climatology,
+    )
 
     (
         cluster_probs,
@@ -90,8 +83,8 @@ def compute_quantile_exceedance_BSS_from_pca(
         targets_categorical_climatology,
         conditional_probs_targets,
     ) = compute_inputs_to_calc_quantile_exceedance(
-        cluster_probs_testing=cluster_probs_testing.transpose(1, 0),
-        cluster_probs_training=cluster_probs_training.transpose(1, 0),
+        cluster_probs_testing=cluster_probs_testing,
+        cluster_probs_training=cluster_probs_training,
         targets_testing=target_test,
         targets_training=target_climatology,
         q=q,
@@ -125,18 +118,14 @@ def compute_BSS_clusters_target_from_vae(
     :param target_categorical_climatology: Climatology data for the target categories, with shape (times, ..., classes).
     :return: The Brier skill score for the classification of the target variable by the clusters.
     """
+    cluster_probs_testing, cluster_probs_training = _get_vae_cluster_probabilities(
+        vae, input_test, input_climatology,  
+    )
 
-    cluster_probs_testing = predict_clusters(vae, input_test)
-
-    if input_climatology is None or targets_categorical_climatology is None:
-        conditional_probs_targets = None
-
-    else:
-        cluster_probs_training = predict_clusters(vae, input_climatology)
-        conditional_probs_targets = compute_conditional_probabilities(
-            cluster_probs=cluster_probs_training,
-            targets_categorical=targets_categorical_climatology,
-        )
+    conditional_probs_targets = _compute_optional_conditional_probs(
+        cluster_probs_training=cluster_probs_training,
+        targets_categorical_climatology=targets_categorical_climatology,
+    )
 
     return compute_BSS_clusters_target(
         cluster_probs=cluster_probs_testing,
@@ -170,27 +159,23 @@ def compute_quantile_exceedance_BSS_from_vae(
     :return: The Brier skill score for the classification of the target variable by the clusters.
     """
 
-    cluster_probs_testing = predict_clusters(vae, input_test)
+    cluster_probs_testing, cluster_probs_training = _get_vae_cluster_probabilities(
+        vae,input_test,input_climatology,
+    )
 
-    if input_climatology is None or target_climatology is None:
-        cluster_probs_training = None
-        conditional_probs_targets = None
-    else:
-        cluster_probs_training = predict_clusters(vae, input_climatology)
-
-        (
-            cluster_probs,
-            targets_categorical,
-            targets_categorical_climatology,
-            conditional_probs_targets,
-        ) = compute_inputs_to_calc_quantile_exceedance(
-            cluster_probs_testing=cluster_probs_testing,
-            cluster_probs_training=cluster_probs_training,
-            targets_testing=target_test,
-            targets_training=target_climatology,
-            q=q,
-            larger_than=larger_than,
-        )
+    (
+        cluster_probs,
+        targets_categorical,
+        targets_categorical_climatology,
+        conditional_probs_targets,
+    ) = compute_inputs_to_calc_quantile_exceedance(
+        cluster_probs_testing=cluster_probs_testing,
+        cluster_probs_training=cluster_probs_training,
+        targets_testing=target_test,
+        targets_training=target_climatology,
+        q=q,
+        larger_than=larger_than,
+    )
     return compute_BSS_clusters_target(
         cluster_probs=cluster_probs,
         targets_categorical=targets_categorical,
@@ -198,6 +183,66 @@ def compute_quantile_exceedance_BSS_from_vae(
         conditional_probs=conditional_probs_targets,
     )
 
+def _compute_optional_conditional_probs(
+    cluster_probs_training: np.ndarray | None,
+    targets_categorical_climatology: np.ndarray | None,
+) -> np.ndarray | None:
+    """Compute conditional probabilities if climatology data is present for both inputs."""
+
+    if cluster_probs_training is None or targets_categorical_climatology is None:
+        return None
+
+    return compute_conditional_probabilities(
+        cluster_probs=cluster_probs_training,
+        targets_categorical=targets_categorical_climatology,
+    )
+
+def _get_vae_cluster_probabilities(
+    vae: VAEPredictor,
+    input_test: np.ndarray,
+    input_climatology: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Extract cluster probabilities for test and optional climatology inputs using VAE.
+    
+    :param vae: The VAE model used to predict cluster assignments
+    :param input_test: Test data for the input variable, with shape (times, latitudes, longitudes) or (times, members, latitudes, longitudes).
+    :param input_climatology: Optional climatology data for the input variable, with shape (times, latitudes, longitudes) or (times, members, latitudes, longitudes).
+    :return: A tuple containing:
+        - cluster_probs_testing: Cluster probabilities for the test input, shape (times, n_clusters).
+        - cluster_probs_training: Cluster probabilities for the climatology input, shape (times, n_clusters) or None if input_climatology is not provided.
+    """
+    cluster_probs_testing = predict_clusters(vae, input_test)
+
+    if input_climatology is None:
+        return cluster_probs_testing, None
+
+    cluster_probs_training = predict_clusters(vae, input_climatology)
+    return cluster_probs_testing, cluster_probs_training
+
+def _get_pca_cluster_probabilities(
+    pca_kmeans_predictor: PCAKmeansPredictor,
+    input_test: np.ndarray,
+    input_climatology: np.ndarray | None = None,
+) -> tuple[np.ndarray, np.ndarray | None]:
+    """Extract and transpose cluster probabilities for test and optional climatology inputs using PCA + Kmeans.
+
+    :param pca_kmeans_predictor: The PCA + Kmeans model used to predict cluster assignments.
+    :param input_test: Test data for the input variable.
+    :param input_climatology: Optional climatology data for the input variable.
+    :return: A tuple containing:
+        - cluster_probs_testing: Transposed cluster probabilities for test input, shape (clusters, times).
+        - cluster_probs_training: Transposed cluster probabilities for climatology input, shape (clusters, times) or None.
+    """
+    X_test = flatten_input(input_test)
+    cluster_probs_testing = pca_kmeans_predictor.clusters(x=X_test).T
+
+    if input_climatology is None:
+        return cluster_probs_testing, None
+
+    X_train = flatten_input(input_climatology)
+    cluster_probs_training = pca_kmeans_predictor.clusters(x=X_train).T
+
+    return cluster_probs_testing, cluster_probs_training
 
 def predict_clusters(
     vae: VAEPredictor,
@@ -213,24 +258,22 @@ def predict_clusters(
     :return: An array of cluster assignment probabilities for each time step, with shape
         (times, vae.cfg.cluster_number)
     """
+    
     if inputs.ndim == 3:
         encoder_input = flatten_input(X=inputs)
         return vae.encode(input=encoder_input)["clusters_pred"]
 
-    if inputs.ndim == 4:
+    else:
         n_times, n_members, n_latitudes, n_longitudes = inputs.shape
-        ensemble_input = inputs.reshape(n_times * n_members, n_latitudes, n_longitudes)
-        cluster_probabilities = vae.encode(input=flatten_input(X=ensemble_input))[
-            "clusters_pred"
-        ]
+        ensemble_inputs = inputs.reshape(n_times * n_members, n_latitudes, n_longitudes)
+        cluster_probabilities = vae.encode(input=flatten_input(X=ensemble_inputs))["clusters_pred"]
         return cluster_probabilities.reshape(
             n_times, n_members, vae.cfg.cluster_number
         ).mean(axis=1)
 
-    raise ValueError(
-        "inputs must have shape (times, latitudes, longitudes) or "
-        "(times, members, latitudes, longitudes)"
-    )
+
+
+
 
 
 def calculate_cluster_centers(vae: VAEPredictor) -> np.ndarray:

@@ -16,6 +16,7 @@ import plotly.express as px
 from enum import Enum
 from typing import Sequence
 from package_name.constants import EPSILON
+from package_name.data_processing.data_processor import flatten_input
 
 
 class GeographicalFilter(Enum):
@@ -229,14 +230,7 @@ def reshape_data_for_clustering(
     :return:            Two-dimensional array of shape ``(n_time, n_grid_points)``, where each row corresponds to a time step and each column corresponds to a spatial grid point.
     """
     data = xarray_data.values
-
-    if len(data.shape) == 3:
-        nt, ny, nx = data.shape
-        data = np.reshape(data, [nt, ny * nx])
-
-    else:
-        nt, nm, ny, nx = data.shape
-        data = np.reshape(data, [nt, nm, ny * nx])
+    data = flatten_input(data)
 
     return data
 
@@ -257,9 +251,11 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     plt.show()
 
 
-def plot_all_losses(history: tf.keras.callbacks.History):
+def plot_all_losses(history_terms: dict):
     """
-    Plot the training loss and validation loss.
+    Plot the normalized training loss and validation loss for each loss component separately.
+
+    :param history_terms: A dictionary with an entry for each loss component and its values at each training epoch that gets passed to the function from the Keras History object (through the `History.history.items()` method).
     """
     loss_specs = [
         ("total_loss", "Total Loss", "red"),
@@ -275,7 +271,7 @@ def plot_all_losses(history: tf.keras.callbacks.History):
     ]
 
     normalized_history = {
-        key: np.asarray(values)[2:] for key, values in history.history.items()
+        key: np.asarray(values)[2:] for key, values in history_terms
     }
 
     for key, label, color in loss_specs:
@@ -464,15 +460,15 @@ def cluster_country_wise(
                             2. Dataframe with the cluster labels for each day.
                             3. The fitted KMeans model.
     """
-    X_clean = SimpleImputer(strategy="mean").fit_transform(df_in)
+    X_standardized = SimpleImputer(strategy="mean").fit_transform(df_in)
 
     if standardize:
-        X_clean = StandardScaler().fit_transform(X_clean)
+        X_standardized = StandardScaler().fit_transform(X_standardized)
 
     kmeans = KMeans(n_clusters=cluster_number, random_state=0)
-    cluster_labels = kmeans.fit_predict(X_clean)
+    cluster_labels = kmeans.fit_predict(X_standardized)
     df_labels = pd.DataFrame({"labels": cluster_labels}, index=df_in.index)
-    df_norm = pd.DataFrame(X_clean, columns=df_in.columns, index=df_in.index)
+    df_norm = pd.DataFrame(X_standardized, columns=df_in.columns, index=df_in.index)
 
     return df_norm, df_labels
 
@@ -480,13 +476,12 @@ def cluster_country_wise(
 def calc_country_wise_cluster_means(
     country_data: pd.DataFrame,
     cluster_labels: pd.DataFrame,
-):
+) -> pd.DataFrame:
     """
     Plot the mean values for each cluster in a country-by-country manner.
 
     :param country_data (pd.DataFrame): A DataFrame containing the country-wise data with iso2 labels.
     :param cluster_labels (pd.DataFrame): A DataFrame containing the cluster labels for each country.
-
     :return: A DataFrame with a row for each cluster and iso3 labels as columns containing the mean cluster values.
     """
     cc = coco.CountryConverter()
@@ -513,7 +508,6 @@ def plot_country_wise_cluster_means(
     :param country_data (pd.DataFrame): A DataFrame containing the country-wise data with iso2 labels.
     :param cluster_labels (pd.DataFrame): A DataFrame containing the cluster labels for each country.
     :param save_path (str): The path to save the plot. If None, the plot is displayed.
-
     :return: None
     """
     df_cluster_mean = calc_country_wise_cluster_means(country_data, cluster_labels)

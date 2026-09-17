@@ -15,7 +15,7 @@ from package_name.model.utils import (
     construct_decoder_config,
     LossFactorsConfig,
 )
-
+LEARNING_RATE: float = 1e-3
 
 class VAETrainer:
     def __init__(
@@ -52,7 +52,7 @@ class VAETrainer:
         """
         self._model.load_weights(path)
 
-    def compile(self, learning_rate: float = 1e-3) -> None:
+    def compile(self, learning_rate: float = LEARNING_RATE) -> None:
         """Compile the model."""
         optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         self._model.compile(optimizer=optimizer)
