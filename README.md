@@ -1,12 +1,12 @@
 # CodeForEarth
 
 This repository provides a python package for identifying **weather regimes** informative for a given target variable (for example energy production/consumption) from weather data, using a custom **Categorical Mixture Model Variational Autoencoder
- (CMM-VAE)** [1]. The method is based on this repository: https://github.com/fiona511/predictability_paper. In addition to the package, the repository applies the method to the energy field and identifies **weather regimes** informative for the energy consumption. The package also provides a classical PCA + K-means baseline,
+ (CMM-VAE)** [1]. The method is based on this repository: https://github.com/fiona511/predictability_paper. In addition to the package, the repository applies the method to energy production data. The package also provides a classical PCA + K-means baseline,
 evaluation metrics (Brier skill score, ROC AUC), plotting utilities, and tools to
 score the performance of these regimes in predicting energy variables on S2S hindcasts.
 
 It was built as part of a CodeForEarth project (organized by ECWMF) by Quentin
-Nicolas, Emma Scharfmann Vishnupriya Selvakumar, and Nora Zilibotti
+Nicolas, Emma Scharfmann, Vishnupriya Selvakumar, and Nora Zilibotti
 
 > **Note on naming:** the importable package is currently called `package_name` (i.e. you write
 > `from package_name.training.trainer import VAETrainer`, not `from codeforearth import ...`).
