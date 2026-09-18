@@ -123,7 +123,7 @@ def compute_BSS_clusters_target(
             cluster_probs=cluster_probs, targets_categorical=targets_categorical
         )
 
-    forecast = _compute_probabilistic_forecast(
+    forecast = compute_probabilistic_forecast(
         cluster_probs=cluster_probs.astype(np.float32),
         conditional_probs=conditional_probs.astype(np.float32),
     ).reshape(*targets_reshaped.shape)
@@ -165,7 +165,7 @@ def compute_conditional_probabilities(
     return joint_weights / np.maximum(mean_cluster_probs, EPSILON)
 
 
-def _compute_probabilistic_forecast(
+def compute_probabilistic_forecast(
     cluster_probs: np.ndarray,
     conditional_probs: np.ndarray,
 ) -> np.ndarray:
