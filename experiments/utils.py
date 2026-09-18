@@ -251,7 +251,7 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     plt.show()
 
 
-def plot_all_losses(history_terms: dict):
+def plot_all_losses(loss_terms: dict):
     """
     Plot the normalized training loss and validation loss for each loss component separately.
 
@@ -271,7 +271,7 @@ def plot_all_losses(history_terms: dict):
     ]
 
     normalized_history = {
-        key: np.asarray(values)[2:] for key, values in history_terms
+        key: np.asarray(values)[2:] for key, values in loss_terms
     }
 
     for key, label, color in loss_specs:
@@ -446,7 +446,7 @@ def cluster_country_wise(
     df_in: pd.DataFrame,
     cluster_number: int,
     standardize: bool = True,
-) -> tuple[pd.DataFrame, pd.DataFrame, KMeans]:
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     """Preprocesses country-wise data (impute, optional scale) and applies KMeans clustering.
 
     :param df_in:           The country-wise dataframe to be clustered (only
@@ -458,7 +458,6 @@ def cluster_country_wise(
                             1. Dataframe of preprocessed features (imputed or
                             imputed+scaled).
                             2. Dataframe with the cluster labels for each day.
-                            3. The fitted KMeans model.
     """
     X_standardized = SimpleImputer(strategy="mean").fit_transform(df_in)
 
@@ -472,6 +471,35 @@ def cluster_country_wise(
 
     return df_norm, df_labels
 
+def calc_quantiles_UK(
+    df_in: pd.DataFrame,
+    cluster_number: int,
+    standardize: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Preprocesses country-wise data (impute, optional scale) and assigns each day to a quantile.
+
+    :param df_in:           The country-wise dataframe to be clustered (only
+    countries as columns).
+    :param cluster_number:   The number of clusters to be created.
+    :param standardize:     If True, normalizes data (mean=0, std=1). If False,
+    only imputes NaNs.
+    :return:                A tuple containing:
+                            1. Dataframe of preprocessed features (imputed or
+                            imputed+scaled).
+                            2. Dataframe with the cluster/quantile labels for each day.
+    """
+    X_standardized = SimpleImputer(strategy="mean").fit_transform(df_in)
+
+    if standardize:
+        X_standardized = StandardScaler().fit_transform(X_standardized)
+
+    X_standardized_reshaped = np.reshape(X_standardized, -1)
+    quantiles = np.quantile(X_standardized_reshaped, np.arange(0, 1, 1.0/cluster_number))
+    cluster_labels = np.digitize(np.reshape(X_standardized_reshaped, -1), quantiles) - 1
+    df_labels = pd.DataFrame({"labels": cluster_labels}, index=df_in.index)
+    df_norm = pd.DataFrame(X_standardized, columns=df_in.columns, index=df_in.index)
+
+    return df_norm, df_labels
 
 def calc_country_wise_cluster_means(
     country_data: pd.DataFrame,
