@@ -1,12 +1,12 @@
 # CodeForEarth
 
-This repository provides a python package for identifying **weather regimes** insightful about energy consumption from climate data, using a custom **Conditional Mixture-Model VAE
-(CMM-VAE)**. The method is based on this repository: https://github.com/fiona511/predictability_paper. The goal of the method is to define regimes which are informative about the energy consumption. The package also provides a classical PCA + K-means baseline,
-evaluation metrics (Brier skill score, ROC AUC), cartopy-based plotting utilities, and tools to
-score S2S (subseasonal-to-seasonal) forecasts against these regimes.
+This repository provides a python package for identifying **weather regimes** informative for a given target variable (for example energy production/consumption) from weather data, using a custom **Categorical Mixture Model Variational Autoencoder
+ (CMM-VAE)** [1]. The method is based on this repository: https://github.com/fiona511/predictability_paper. In addition to the package, the repository applies the method to the energy field and identifies **weather regimes** informative for the energy consumption. The package also provides a classical PCA + K-means baseline,
+evaluation metrics (Brier skill score, ROC AUC), plotting utilities, and tools to
+score the performance of these regimes in predicting energy variables on S2S hindcasts.
 
-It was built as part of a CodeForEarth project, organized by ECWMF, by Emma Scharfmann, Quentin
-Nicolas, Nora Zilibotti, and Vishnupriya Selvakumar.
+It was built as part of a CodeForEarth project (organized by ECWMF) by Quentin
+Nicolas, Emma Scharfmann Vishnupriya Selvakumar, and Nora Zilibotti
 
 > **Note on naming:** the importable package is currently called `package_name` (i.e. you write
 > `from package_name.training.trainer import VAETrainer`, not `from codeforearth import ...`).
@@ -26,7 +26,7 @@ cd CodeForEarth
 # Install the package in editable mode
 pip install -e .
 
-# Install the remaining dependencies (xesmf/esmpy are easiest to get via conda-forge)
+# Install the remaining dependencies (xesmf/esmpy are easier to get via conda-forge)
 conda install -c conda-forge esmpy
 pip install -r requirements.txt
 ```
@@ -35,7 +35,7 @@ Requirements: Python ≥ 3.13. The stack is TensorFlow/Keras for the model, xarr
 for climate-data handling, scikit-learn for the baseline and metrics, and cartopy/matplotlib/
 seaborn for plotting.
 
-### 1.2 A highlevel overview of the method
+### 1.2 A high-level overview of the method
 
 1. You have a **predictor field** `X` (e.g. daily Z500 geopotential height anomalies over a
    region), shaped `(n_times, n_lat, n_lon)`.
@@ -44,19 +44,17 @@ seaborn for plotting.
    `(n_times, n_target_classes)`.
 3. You configure and train a `VAETrainer`, which fits a probabilistic encoder that maps `X` to a
    latent space organized around `cluster_number` Gaussian components, jointly with a classifier
-   head that ties clusters to the target `y`.
-4. You load the trained weights into a `VAEPredictor` to get per-day cluster probabilities
+   head that forces clusters to be informative about the target `y`.
+4. You load the trained weights into a `VAEPredictor` to get per-timestep cluster probabilities
    (regime assignments), decode cluster centers back into physical space, and score how
    informative the regimes are about the target with Brier skill scores.
 
 ### 1.3 End-to-end walkthrough
 
 ```python
-import numpy as np
 from package_name.model.utils import sampling
 from package_name.training.trainer import VAETrainer, VAEConfig
 from package_name.inference.predictor import VAEPredictor
-from package_name.data_processing.data_processor import flatten_input
 from package_name.evaluation import metrics
 from package_name.evaluation.utils import predict_clusters
 
@@ -99,7 +97,7 @@ bss = metrics.compute_BSS_clusters_target(vae=predictor, inputs=X, targets_categ
 print(f"Brier skill score (regimes -> target): {bss:.3f}")
 ```
 
-You can find a full working example, including loading ERA5 Z500 and CHIRPS precipitation data, cross-
+You can find a full working example for identifying weather regimes informative for the precipitation, which includes loading ERA5 Z500 and CHIRPS precipitation data, cross-
 validation, plotting, and comparison against the PCA + K-means baseline — is in
 `experiments/cmmvae.ipynb` and an S2S-forecast scoring example is in `experiments/cmmvae_s2s.ipynb`.
 
@@ -107,7 +105,7 @@ validation, plotting, and comparison against the PCA + K-means baseline — is i
 
 ## 2. What the package is about
 
-This package implements a **Categorical/Gaussian Mixture VAE** that is learns:
+This package implements a CMM-VAE that learns:
 
 - a latent space `z`, sampled from an encoder `q(z | x)` (the usual VAE reparameterization trick,
   see `package_name/model/utils.py::sampling`),
@@ -121,7 +119,7 @@ This package implements a **Categorical/Gaussian Mixture VAE** that is learns:
 
 The loss is made of five terms: 
 - VAE reconstruction, a regularization term pulling `z` towards its assigned mixture component,
-- a KL term between the predicted target distribution and the true target, 
+- a KL divergence term between the predicted target distribution and the true target, 
 - a consistency term between cluster predictions
 made from `x` and from the target
 - a Dirichlet-style regularizer on `pi` to discourage empty
@@ -129,6 +127,9 @@ clusters.
 In other words, the reconstruction and mixture-prior terms push the model to find
 circulation-based regimes, while the target-prediction and consistency terms push those regimes to
 be predictive of the chosen impact variable.
+
+For more details about the method and the loss function, you can refer [1]. 
+
 ---
 
 ## 3. What is possible with the package
@@ -149,8 +150,7 @@ be predictive of the chosen impact variable.
 - **Fit and use a classical PCA + K-means baseline** with the same probabilistic-cluster-output
   interface, for comparison against the CMM-VAE (`package_name/evaluation/pca_kmeans.py`).
 - **Visualize regimes on a map**: decoded cluster centers, empirical (composite) cluster centers,
-  and the spatial odds ratio of a binary impact variable within each cluster, all as cartopy
-  contour maps (`package_name/evaluation/plots.py`).
+  and the spatial odds ratio of a binary impact variable within each cluster (`package_name/evaluation/plots.py`).
 - **Evaluate S2S (subseasonal-to-seasonal) forecasts** against the fitted regimes: bootstrap Brier
   skill score and multiclass ROC AUC by forecast lead time, with plotting
   (`package_name/evaluation/s2s_eval.py`).
@@ -181,12 +181,8 @@ be predictive of the chosen impact variable.
 
 - **Placeholder package name.** The distribution is `package_name` (see `pyproject.toml`), so
   every import is `from package_name... import ...`. This should eventually be renamed to
-  something like `codeforearth` for a public release — until then, don't expect the import path
+  something like `weatherregimes` for a public release — until then, don't expect the import path
   to match the repo name.
-- **Supervised, not purely unsupervised, clustering.** Unlike classical weather-regime methods,
-  the CMM-VAE *requires* a target label `y` at training time to shape the clusters. This is the
-  point of the method (impact-aware regimes), but it also means the regimes you get are informative 
-  about this variable. 
 - **No spatial structure in the network.** The encoder/decoder are plain dense (MLP) stacks over a
   flattened `(lat × lon)` vector (`data_processor.flatten_input`); there is no convolutional or
   graph structure exploiting spatial locality. This is simple and fast for the modest grids used
@@ -212,9 +208,6 @@ be predictive of the chosen impact variable.
 
 ## Development
 
-```bash
-black .    # format the code before opening a PR
-```
 
 See the docstring, naming, and formatting conventions the project follows in
 `CONTRIBUTING`-style form below:
@@ -225,8 +218,12 @@ See the docstring, naming, and formatting conventions the project follows in
 - `snake_case` names, function names start with a verb (`build_model`, `get_data`, ...), type
   hints are as precise as possible (prefer small dataclasses over loose dicts), and empty
   container initializations are annotated (`new_list: list[int] = []`).
-- Run `black .` before creating a PR.
+- Run `black .` before creating a PR to format the code.
 
 ## License
 
 MIT — see `LICENSE`.
+
+## References
+
+[1] Spuler, F. R., Kretschmer, M., Balmaseda, M. A., Kovalchuk, Y., and Shepherd, T. G.: _Learning predictable and informative dynamical drivers of extreme precipitation using variational autoencoders_, Weather Clim. Dynam., 6, 995–1014, https://doi.org/10.5194/wcd-6-995-2025, 2025.
