@@ -19,6 +19,31 @@ class VAEModel(Model):
         self.encoder = encoder
         self.decoder = decoder
         self.custom_loss = custom_loss
+        self.reconstruction_loss_tracker = tf.keras.metrics.Mean(
+            name="reconstruction_loss"
+        )
+        self.vae_regularisation_loss_tracker = tf.keras.metrics.Mean(
+            name="vae_regularisation_loss"
+        )
+        self.target_prediction_loss_tracker = tf.keras.metrics.Mean(
+            name="target_prediction_loss"
+        )
+        self.cluster_target_regularisation_loss_tracker = tf.keras.metrics.Mean(
+            name="cluster_target_regularisation_loss"
+        )
+        self.mixture_regularization_loss_tracker = tf.keras.metrics.Mean(
+            name="mixture_regularization_loss"
+        )
+        self.total_loss_tracker = tf.keras.metrics.Mean(name="total_loss")
+
+        self.tracker_mapping = {
+            "vae_reconstruction": self.reconstruction_loss_tracker,
+            "vae_regularisation": self.vae_regularisation_loss_tracker,
+            "target_prediction": self.target_prediction_loss_tracker,
+            "cluster_target_regularisation": self.cluster_target_regularisation_loss_tracker,
+            "mixture_regularization": self.mixture_regularization_loss_tracker,
+            "total": self.total_loss_tracker,
+        }
 
     @override
     def call(self, encoder_input: dict, **kwargs):
@@ -48,6 +73,11 @@ class VAEModel(Model):
             ),
         )
         self.add_loss(tf.reduce_mean(losses.total))
+        self.total_loss_tracker.update_state(losses.total)
+
+        for loss_key, tensor_value in losses.individual_losses().items():
+            self.tracker_mapping[loss_key].update_state(tensor_value)
+
         return {
             "encoder_output": {
                 "latent": {
@@ -60,6 +90,20 @@ class VAEModel(Model):
             },
             "decoder_output": {"x_recon": decoder_output["x_recon"]},
         }
+
+    @property
+    def metrics(self):
+        """
+        Returns list of metrics for the model.
+        """
+        return [
+            self.reconstruction_loss_tracker,
+            self.vae_regularisation_loss_tracker,
+            self.target_prediction_loss_tracker,
+            self.cluster_target_regularisation_loss_tracker,
+            self.mixture_regularization_loss_tracker,
+            self.total_loss_tracker,
+        ]
 
     def build(self, input_shape=None):
         super().build(input_shape)

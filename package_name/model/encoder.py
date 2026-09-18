@@ -1,13 +1,17 @@
 import keras
-from tensorflow.keras.layers import Input, Dense, Reshape, Lambda
+from tensorflow.keras.layers import Input, Dense, Dropout, Reshape, Lambda
 from tensorflow.keras.models import Model
+from tensorflow.keras.regularizers import l2
 
 from package_name.model.utils import EncoderConfig
+DEFAULT_DROPOUT_RATE1: float =0.3
+DEFAULT_DROPOUT_RATE2: float = 0.2
 
 
 class EncoderBuilder:
-    def __init__(self, config: EncoderConfig):
+    def __init__(self, config: EncoderConfig, training: bool):
         self.cfg = config
+        self.training = training
 
     def build(self) -> Model:
         """
@@ -51,7 +55,9 @@ class EncoderBuilder:
         x = Dense(cfg.dim_layer1, activation=cfg.activation, name="enc_dense_1")(
             vector_input
         )
+        x = Dropout(DEFAULT_DROPOUT_RATE1)(x, training=self.training)
         x = Dense(cfg.dim_layer2, activation=cfg.activation, name="enc_dense_2")(x)
+        x = Dropout(DEFAULT_DROPOUT_RATE2)(x, training=self.training)
         x = Dense(cfg.dim_layer3, activation=cfg.activation, name="enc_dense_3")(x)
 
         return x
@@ -81,7 +87,15 @@ class EncoderBuilder:
         mu = Reshape(target_shape=(cfg.cluster_number, cfg.latent_dim), name="mu")(
             mu_vector
         )
-        pi = Dense(cfg.cluster_number, activation="softmax", name="pi")(dummy_input)
+        pi = Dense(
+            cfg.cluster_number,
+            activation="softmax",
+            name="pi",
+            kernel_initializer="glorot_uniform",
+            bias_initializer="zeros",
+        )(
+            dummy_input
+        ) 
 
         return {"mu": mu, "pi": pi}
 
@@ -94,9 +108,12 @@ class EncoderBuilder:
         clusters_pred = Dense(
             cfg.cluster_number, activation="softmax", name="clusters_pred"
         )(clusters_input)
+        target_pred_input_dropped = Dropout(DEFAULT_DROPOUT_RATE1)(clusters_input, training=self.training)
         target_pred = Dense(
-            cfg.pr_cluster_number, activation="softmax", name="target_pred"
-        )(clusters_input)
+            cfg.pr_cluster_number,
+            activation="softmax",
+            name="target_pred", 
+        )(target_pred_input_dropped)
 
         clusters_pred_from_target = Dense(
             cfg.cluster_number, activation="softmax", name="target_clusters_pred"

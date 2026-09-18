@@ -4,12 +4,24 @@ import numpy as np
 import xarray as xr
 from numpy import ndarray
 import cartopy.feature as cfeature
+import tensorflow as tf
+from sklearn.cluster import KMeans
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import make_pipeline
+from sklearn.preprocessing import StandardScaler
+import pandas as pd
+import country_converter as coco
+import plotly.express as px
+
+from enum import Enum
 from typing import Sequence
 from package_name.constants import EPSILON
-from enum import Enum
+from package_name.data_processing.data_processor import flatten_input
+
 
 class GeographicalFilter(Enum):
     """Enum for supported geographical filters."""
+
     MEDITERRANEAN = "mediterranean"
     MOROCCO = "morocco"
     LARGER_MEDITERRANEAN = "larger mediterranean"
@@ -19,8 +31,8 @@ class GeographicalFilter(Enum):
     NEW_ATLANTIC = "new atlantic"
     EXTENDED_EUROPE = "extended europe"
     GLOBAL = "global"
- 
- 
+
+
 GEOGRAPHICAL_BOUNDS = {
     GeographicalFilter.MEDITERRANEAN: ((25, 50), (-20, 45)),
     GeographicalFilter.MOROCCO: ((30, 36), (-11, 0)),
@@ -33,22 +45,23 @@ GEOGRAPHICAL_BOUNDS = {
     GeographicalFilter.GLOBAL: (None, None),
 }
 
+
 def filter_dataset(
     dataset: xr.Dataset,
     geographical_filter: GeographicalFilter,
 ) -> xr.Dataset:
     """
     Filter a dataset by latitude and longitude.
-    
+
     :param dataset:              The dataset to be filtered.
     :param geographical_filter:  The geographical filter to be applied.
     :return:                     The filtered dataset.
     """
     bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
-    
+
     dataset = dataset.sortby("latitude")
     dataset = dataset.sortby("longitude")
-    
+
     if geographical_filter == GeographicalFilter.GLOBAL:
         return dataset
 
@@ -57,6 +70,7 @@ def filter_dataset(
         latitude=slice(bounds[0][0], bounds[0][1]),
         longitude=slice(bounds[1][0], bounds[1][1]),
     )
+
 
 def _generate_spatial_coordinates(
     lower_bound: float,
@@ -70,16 +84,9 @@ def _generate_spatial_coordinates(
     lower_bound = min(lower_bound, upper_bound)
     upper_bound = max(lower_bound, upper_bound)
 
-    number_of_steps = int(
-        np.floor(
-            (upper_bound - lower_bound) / resolution + EPSILON
-        )
-    )
+    number_of_steps = int(np.floor((upper_bound - lower_bound) / resolution + EPSILON))
 
-    coordinates = (
-        lower_bound
-        + np.arange(number_of_steps + 1) * resolution
-    )
+    coordinates = lower_bound + np.arange(number_of_steps + 1) * resolution
     return np.round(coordinates, decimals=10)
 
 
@@ -91,12 +98,12 @@ def _change_spatial_resolution(
 ) -> xr.Dataset | xr.DataArray:
     """
     Filter and interpolate data to a requested spatial resolution.
-    
+
     dataset: dataset to be filtered and interpolated
     geographical_filter: name of the predefined geographical region to retain.
     spatial_resolution: requested spatial resolution in degrees.
     interpolation_method: method to use for interpolation. Default is 'nearest'.
-    
+
     returns: filtered and interpolated dataset
     """
 
@@ -111,9 +118,7 @@ def _change_spatial_resolution(
     if geographical_filter == GeographicalFilter.GLOBAL:
         latitude_bounds, longitude_bounds = _get_avaialble_coordinate_bounds(dataset)
     else:
-        latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[
-            geographical_filter
-        ]
+        latitude_bounds, longitude_bounds = GEOGRAPHICAL_BOUNDS[geographical_filter]
 
     target_lats = _generate_spatial_coordinates(
         lower_bound=min(latitude_bounds),
@@ -130,14 +135,12 @@ def _change_spatial_resolution(
     current_lats = np.asarray(dataset.latitude.values)
     current_lons = np.asarray(dataset.longitude.values)
 
-    latitude_matches = (
-        len(current_lats) == len(target_lats)
-        and np.allclose(current_lats, target_lats)
+    latitude_matches = len(current_lats) == len(target_lats) and np.allclose(
+        current_lats, target_lats
     )
 
-    longitude_matches = (
-        len(current_lons) == len(target_lons)
-        and np.allclose(current_lons, target_lons)
+    longitude_matches = len(current_lons) == len(target_lons) and np.allclose(
+        current_lons, target_lons
     )
 
     if latitude_matches is True and longitude_matches is True:
@@ -149,12 +152,12 @@ def _change_spatial_resolution(
         method=interpolation_method,
         kwargs={"fill_value": "extrapolate"},
     )
-    
+
+
 def _get_avaialble_coordinate_bounds(
     dataset: xr.Dataset | xr.DataArray,
 ) -> tuple[tuple[float, float], tuple[float, float]]:
-    """For the global region, use the available coordinate bounds.
-    """
+    """For the global region, use the available coordinate bounds."""
     latitude_bounds = (
         float(dataset.latitude.min()),
         float(dataset.latitude.max()),
@@ -164,6 +167,7 @@ def _get_avaialble_coordinate_bounds(
         float(dataset.longitude.max()),
     )
     return latitude_bounds, longitude_bounds
+
 
 def _calculate_anomalies(
     x: xr.Dataset | xr.DataArray,
@@ -222,13 +226,11 @@ def reshape_data_for_clustering(
     Reshape a 3D spatiotemporal data array into a 2D array suitable
     for clustering algorithms.
 
-    :param xarray_data: The input data is assumed to have dimensions ``(time, latitude, longitude)`` (or equivalent).
+    :param xarray_data: The input data is assumed to have dimensions ``(time, latitude, longitude)`` or (time, members, latitude, longitude) (or equivalent).
     :return:            Two-dimensional array of shape ``(n_time, n_grid_points)``, where each row corresponds to a time step and each column corresponds to a spatial grid point.
     """
     data = xarray_data.values
-
-    nt, ny, nx = data.shape
-    data = np.reshape(data, [nt, ny * nx])
+    data = flatten_input(data)
 
     return data
 
@@ -240,7 +242,7 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     :param training_loss:   The training loss.
     :param validation_loss: The validation loss.
     """
-    fig, ax = plt.subplots(figsize=(16, 9), dpi=300)
+    fig, ax = plt.subplots(figsize=(12, 5), dpi=300)
     plt.title(label="Model Loss by Epoch", loc="center")
     ax.plot(training_loss, label="Training Data", color="gray")
     ax.plot(validation_loss, label="Test Data", color="red")
@@ -248,7 +250,56 @@ def plot_losses(training_loss: np.ndarray, validation_loss: np.ndarray):
     plt.legend()
     plt.show()
 
-    
+
+def plot_all_losses(history_terms: dict):
+    """
+    Plot the normalized training loss and validation loss for each loss component separately.
+
+    :param history_terms: A dictionary with an entry for each loss component and its values at each training epoch that gets passed to the function from the Keras History object (through the `History.history.items()` method).
+    """
+    loss_specs = [
+        ("total_loss", "Total Loss", "red"),
+        ("reconstruction_loss", "Reconstruction Loss", "blue"),
+        ("vae_regularisation_loss", "VAE Regularisation Loss", "green"),
+        ("target_prediction_loss", "Target Prediction Loss", "orange"),
+        (
+            "cluster_target_regularisation_loss",
+            "Cluster Target Regularisation Loss",
+            "purple",
+        ),
+        ("mixture_regularization_loss", "Mixture Regularization Loss", "brown"),
+    ]
+
+    normalized_history = {
+        key: np.asarray(values)[2:] for key, values in history_terms
+    }
+
+    for key, label, color in loss_specs:
+        train = normalized_history.get(key, np.array([]))
+        val = normalized_history.get(f"val_{key}", np.array([]))
+
+        if train.size:
+            max_train = train.max()
+            if max_train != 0:
+                train = train / max_train
+
+        if val.size:
+            max_val = val.max()
+            if max_val != 0:
+                val = val / max_val
+
+        x = np.arange(2, len(train) + 2)
+        ax = plt.gca()
+        ax.plot(x, train, label=label, color=color, linewidth=2)
+        ax.plot(x, val, color=color, linewidth=1)
+
+    plt.title("Model Loss by Epoch")
+    plt.xlabel("Epoch")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
+
+
 def preprocess_forecast_data(
     dataset: xr.Dataset,
     variable_name: str,
@@ -261,11 +312,11 @@ def preprocess_forecast_data(
     weights: xr.DataArray | None = None,
 ) -> xr.Dataset:
     """Load and preprocess forecast data for one reference date.
-    
+
     :param dataset:               Dataset containing the forecast data (members and control merged).
     :param variable_name:         Name of the variable to extract from the dataset.
     :param multiplication_factor: Factor by which to multiply the variable values after loading.
-    :param geographical_filter:   Name of the predefined geographical region to retain. 
+    :param geographical_filter:   Name of the predefined geographical region to retain.
     :param anomalies:             If True, remove the mean for each day of the year, producing daily anomalies.
     :param normalization:         If True, divide the data by its standard deviation over the time dimension.
     :param rolling_window:        Size of the centered rolling mean window along the time dimension. If 0, no smoothing is applied.
@@ -277,9 +328,7 @@ def preprocess_forecast_data(
     dataset[variable_name] *= multiplication_factor
 
     # Convert forecast steps to daily lead times.
-    dataset = dataset.groupby(
-        dataset["step"].dt.days
-    ).mean()
+    dataset = dataset.groupby(dataset["step"].dt.days).mean()
 
     if anomalies:
         dataset = _calculate_anomalies(
@@ -289,9 +338,7 @@ def preprocess_forecast_data(
 
     if normalization:
         standard_deviation = dataset.std()
-        dataset = dataset / standard_deviation.where(
-            standard_deviation != 0
-        )
+        dataset = dataset / standard_deviation.where(standard_deviation != 0)
 
     dataset = _change_spatial_resolution(
         dataset=dataset,
@@ -299,15 +346,15 @@ def preprocess_forecast_data(
         spatial_resolution=spatial_resolution,
         interpolation_method="nearest",
     )
-    
+
     if rolling_window < 0:
-        raise ValueError(
-            "rolling_window cannot be negative."
-        )
-        
-    dataset = dataset.rolling(days=rolling_window,
-                                min_periods=1,
-                                center=True,).mean()
+        raise ValueError("rolling_window cannot be negative.")
+
+    dataset = dataset.rolling(
+        days=rolling_window,
+        min_periods=1,
+        center=True,
+    ).mean()
 
     if weights is not None:
         dataset = dataset * weights
@@ -394,3 +441,114 @@ def visualise_s2s_cluster_contours(
 
     return fig
 
+
+def cluster_country_wise(
+    df_in: pd.DataFrame,
+    cluster_number: int,
+    standardize: bool = True,
+) -> tuple[pd.DataFrame, pd.DataFrame, KMeans]:
+    """Preprocesses country-wise data (impute, optional scale) and applies KMeans clustering.
+
+    :param df_in:           The country-wise dataframe to be clustered (only
+    countries as columns).
+    :param cluster_number:   The number of clusters to be created.
+    :param standardize:     If True, normalizes data (mean=0, std=1). If False,
+    only imputes NaNs.
+    :return:                A tuple containing:
+                            1. Dataframe of preprocessed features (imputed or
+                            imputed+scaled).
+                            2. Dataframe with the cluster labels for each day.
+                            3. The fitted KMeans model.
+    """
+    X_standardized = SimpleImputer(strategy="mean").fit_transform(df_in)
+
+    if standardize:
+        X_standardized = StandardScaler().fit_transform(X_standardized)
+
+    kmeans = KMeans(n_clusters=cluster_number, random_state=0)
+    cluster_labels = kmeans.fit_predict(X_standardized)
+    df_labels = pd.DataFrame({"labels": cluster_labels}, index=df_in.index)
+    df_norm = pd.DataFrame(X_standardized, columns=df_in.columns, index=df_in.index)
+
+    return df_norm, df_labels
+
+
+def calc_country_wise_cluster_means(
+    country_data: pd.DataFrame,
+    cluster_labels: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Plot the mean values for each cluster in a country-by-country manner.
+
+    :param country_data (pd.DataFrame): A DataFrame containing the country-wise data with iso2 labels.
+    :param cluster_labels (pd.DataFrame): A DataFrame containing the cluster labels for each country.
+    :return: A DataFrame with a row for each cluster and iso3 labels as columns containing the mean cluster values.
+    """
+    cc = coco.CountryConverter()
+
+    iso2_labels = country_data.columns.astype(str).tolist()
+    iso3_labels = cc.convert(names=iso2_labels, to="ISO3")
+
+    df_cluster_mean = pd.DataFrame(
+        columns=iso3_labels, index=[f"Cluster {i}" for i in range(4)], dtype=float
+    )
+    for cluster_id in range(4):
+        cluster_i = country_data[cluster_labels["labels"] == cluster_id]
+        df_cluster_mean.loc[f"Cluster {cluster_id}"] = cluster_i.mean().values
+
+    return df_cluster_mean
+
+
+def plot_country_wise_cluster_means(
+    country_data: pd.DataFrame, cluster_labels: pd.DataFrame, save_path: str = None
+):
+    """
+    Plot the mean values for each cluster in a country-by-country manner.
+
+    :param country_data (pd.DataFrame): A DataFrame containing the country-wise data with iso2 labels.
+    :param cluster_labels (pd.DataFrame): A DataFrame containing the cluster labels for each country.
+    :param save_path (str): The path to save the plot. If None, the plot is displayed.
+    :return: None
+    """
+    df_cluster_mean = calc_country_wise_cluster_means(country_data, cluster_labels)
+    df_plot = (
+        df_cluster_mean.reset_index()
+        .melt(id_vars=["index"], var_name="iso3_labels", value_name="metric_value")
+        .rename(columns={"index": "cluster"})
+    )
+
+    fig = px.choropleth(
+        df_plot,
+        range_color=[-0.75, 0.75],
+        locations="iso3_labels",
+        locationmode="ISO-3",
+        color="metric_value",
+        scope="europe",
+        facet_col="cluster",
+        color_continuous_scale=px.colors.diverging.BrBG,
+        # title="Target Energy Clusters"
+    )
+
+    fig.for_each_annotation(lambda a: a.update(text=a.text.split("=")[-1]))
+    fig.update_layout(
+        margin={"r": 10, "t": 40, "l": 10, "b": 5},
+        height=200,
+        width=600,
+        coloraxis_colorbar=dict(
+            title="CF anomaly",
+            thicknessmode="pixels",
+            thickness=5,
+            orientation="h",
+            lenmode="fraction",
+            len=0.5,
+            yanchor="middle",
+            y=-0.1,
+        ),
+    )
+    if save_path:
+        fig.write_image(save_path, scale=3)
+
+    else:
+        fig.show(
+            config={"staticPlot": True, "displayModeBar": False, "scrollZoom": False}
+        )
