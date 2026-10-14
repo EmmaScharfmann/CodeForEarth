@@ -18,6 +18,19 @@ from typing import Sequence
 from package_name.constants import EPSILON
 from package_name.data_processing.data_processor import flatten_input
 
+_LOSS_SPECIFICATION = [
+        ("total_loss", "Total Loss", "red"),
+        ("reconstruction_loss", "Reconstruction Loss", "blue"),
+        ("vae_regularisation_loss", "VAE Regularisation Loss", "green"),
+        ("target_prediction_loss", "Target Prediction Loss", "orange"),
+        (
+            "cluster_target_regularisation_loss",
+            "Cluster Target Regularisation Loss",
+            "purple",
+        ),
+        ("mixture_regularization_loss", "Mixture Regularization Loss", "brown"),
+    ]
+
 
 class GeographicalFilter(Enum):
     """Enum for supported geographical filters."""
@@ -257,24 +270,12 @@ def plot_all_losses(history_terms: dict):
 
     :param history_terms: A dictionary with an entry for each loss component and its values at each training epoch that gets passed to the function from the Keras History object (through the `History.history.items()` method).
     """
-    loss_specs = [
-        ("total_loss", "Total Loss", "red"),
-        ("reconstruction_loss", "Reconstruction Loss", "blue"),
-        ("vae_regularisation_loss", "VAE Regularisation Loss", "green"),
-        ("target_prediction_loss", "Target Prediction Loss", "orange"),
-        (
-            "cluster_target_regularisation_loss",
-            "Cluster Target Regularisation Loss",
-            "purple",
-        ),
-        ("mixture_regularization_loss", "Mixture Regularization Loss", "brown"),
-    ]
 
     normalized_history = {
         key: np.asarray(values)[2:] for key, values in history_terms
     }
 
-    for key, label, color in loss_specs:
+    for key, label, color in _LOSS_SPECIFICATION:
         train = normalized_history.get(key, np.array([]))
         val = normalized_history.get(f"val_{key}", np.array([]))
 
