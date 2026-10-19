@@ -174,20 +174,31 @@ class PCAKmeansPredictor:
         Predict cluster assignments and probabilities for new data using trained models.
         New data must have the same number of features as training data.
 
-        :param x:               ndarray of shape (n_samples, n_features). New input data matrix
+        :param x:               ndarray of shape (n_samples, n_features) or (n_samples, n_members, n_features). New input data matrix
         :return:                cluster_probs: Array of shape (n_clusters, n_samples), which contains
                                 the probability of each sample of belonging to each cluster.
         """
-        models = self.model
-        scaler = models.scaler
-        x_scaled = scaler.transform(X=x)
 
-        pca = models.pca
-        x_pca = pca.transform(X=x_scaled)
+        if x.ndim == 2:
+            cluster_probs = _cluster_probabilities(x, self.model)
 
-        cluster_probs = _get_probabilities_from_kmeans(x=x_pca, kmeans=models.kmeans)
+        else:
+            per_member = [_cluster_probabilities(x[:, member, :], self.model) for member in range(x.shape[1])]
+            cluster_probs = np.mean(per_member, axis=0)
 
         return cluster_probs
+
+def _cluster_probabilities(x_2d: np.ndarray, model: PCAKmeansModels) -> np.ndarray:
+    """Scale, project with PCA, and return k-means cluster probabilities.
+
+    :param x_2d:            2D array of shape (n_samples, n_features). Input data matrix
+    :param model:           PCAKmeansModels object containing 'pca', 'kmeans', and 'scaler'
+    :return:                2D array of shape (n_clusters, n_samples). Cluster probabilities for each sample. The probabilities for each sample sum to 1.0
+    """
+    scaler, x_scaled = _fit_scaler(x=x_2d)
+    x_scaled = scaler.transform(X=x_2d)
+    x_pca = model.pca.transform(X=x_scaled)
+    return _get_probabilities_from_kmeans(x=x_pca, kmeans=model.kmeans)
 
 
 def _fit_scaler(x: np.ndarray) -> tuple[StandardScaler, np.ndarray]:

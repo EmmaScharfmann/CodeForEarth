@@ -16,8 +16,9 @@ from typing import Literal
 from collections.abc import Iterator
 
 type MethodName = Literal["cmmvae", "pca"]
-    
+
 _FILE_NAME = "cond_prob_{method}_{data}_{cluster_number}_{chosen_count}.csv"
+
 
 def save_cprobs(
     cprobs: tuple[pd.DataFrame, ...],
@@ -27,8 +28,7 @@ def save_cprobs(
     chosen_count: int,
     output_dir: str | Path = "results",
 ) -> str:
-    
-    '''
+    """
     Save conditional probabilities to CSV files.
     cprobs: Tuple of DataFrames containing conditional probabilities for each method.
     methods: Sequence of method names corresponding to the cprobs.
@@ -36,15 +36,14 @@ def save_cprobs(
     cluster_number: Number of clusters used in the forecast.
     chosen_count: Number of chosen samples for the CMM-VAE method. Default is 1.
     output_dir: Directory where the CSV files will be saved. Default is "results".
-    
-    Returns: Saves the conditional probabilities to CSV files in the specified output directory 
+
+    Returns: Saves the conditional probabilities to CSV files in the specified output directory
             and returns a message indicating the location of the saved files.
-    '''
-    
+    """
+
     output_dir = Path(output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
-    
+
     for method, cprob, data_type in zip(methods, cprobs, data):
         file_name = _FILE_NAME.format(
             method=method,
@@ -56,7 +55,7 @@ def save_cprobs(
         cprob.to_csv(file_path, index=False)
     return f"Conditional probabilities saved to {output_dir.resolve()}"
 
-    
+
 def plot_forecast_scores(
     methods: Sequence[MethodName],
     cluster_number: int,
@@ -77,9 +76,9 @@ def plot_forecast_scores(
     sample_fraction: Fraction of data to sample for each bootstrap iteration.
     result_dir: Directory to where conditional probabilities are saved and where BSS and ROC AUC results will be saved.
                 Default is "results".
-    random_state: Random seed for reproducibility.  
+    random_state: Random seed for reproducibility.
     save_results: If True, save the BSS and ROC AUC results to CSV files in the "results" directory.
-    
+
     Returns:figures of BSS and ROC AUC plots.
     """
     bss_results: list[pd.DataFrame] = []
@@ -114,19 +113,17 @@ def plot_forecast_scores(
 
         if save_results is True:
             Path(result_dir).mkdir(
-            parents=True,
-            exist_ok=True,
+                parents=True,
+                exist_ok=True,
             )
-            
+
             method_bss.to_csv(
-                f"{result_dir}/bss_s2s_{method}_bootstrapped_"
-                f"{cluster_number}.csv",
+                f"{result_dir}/bss_s2s_{method}_bootstrapped_" f"{cluster_number}.csv",
                 index=False,
             )
 
             method_roc.to_csv(
-                f"{result_dir}/roc_s2s_{method}_"
-                f"{cluster_number}.csv",
+                f"{result_dir}/roc_s2s_{method}_" f"{cluster_number}.csv",
                 index=False,
             )
 
@@ -145,6 +142,7 @@ def plot_forecast_scores(
         roc_data=combined_roc,
     )
 
+
 def _load_merged_forecast(
     method: MethodName,
     cluster_number: int,
@@ -152,17 +150,18 @@ def _load_merged_forecast(
     result_dir: str | Path = "results",
 ) -> pd.DataFrame:
     """Load and merge forecast and ERA5 probabilities."""
-    
+
     count = chosen_count if method == "cmmvae" else ""
-    era5_file = _FILE_NAME.format(method=method, 
-                                  data="era5", 
-                                  cluster_number=cluster_number, 
-                                  chosen_count=count)
-    forecast_file = _FILE_NAME.format(method=method, 
-                                      data="forecast", 
-                                      cluster_number=cluster_number, 
-                                      chosen_count=count)
-    
+    era5_file = _FILE_NAME.format(
+        method=method, data="era5", cluster_number=cluster_number, chosen_count=count
+    )
+    forecast_file = _FILE_NAME.format(
+        method=method,
+        data="forecast",
+        cluster_number=cluster_number,
+        chosen_count=count,
+    )
+
     result_dir = Path(result_dir)
 
     era5 = pd.read_csv(result_dir / era5_file)
@@ -174,9 +173,7 @@ def _load_merged_forecast(
     era5 = era5.assign(
         label=probabilities.idxmax(axis=1).astype(int),
         prob=probabilities.max(axis=1),
-    ).rename(
-        columns={column: f"era5_{column}" for column in probability_columns}
-    )
+    ).rename(columns={column: f"era5_{column}" for column in probability_columns})
 
     return (
         forecast.merge(era5, on="valid_date", how="inner")
@@ -199,18 +196,14 @@ def _bootstrap_samples_by_leadtime(
         raise ValueError("n_bootstrap must be at least 1.")
 
     if not 0 < sample_fraction <= 1:
-        raise ValueError(
-            "sample_fraction must be greater than 0 and at most 1."
-        )
+        raise ValueError("sample_fraction must be greater than 0 and at most 1.")
 
     rng = np.random.default_rng(random_state)
     expected_classes = set(range(cluster_number))
 
     for leadtime, leadtime_data in merged_forecast.groupby("leadtime"):
         if require_all_classes:
-            present_classes = set(
-                leadtime_data["label"].astype(int).unique()
-            )
+            present_classes = set(leadtime_data["label"].astype(int).unique())
             missing_classes = expected_classes - present_classes
 
             if missing_classes:
@@ -238,9 +231,7 @@ def _bootstrap_samples_by_leadtime(
                 if not require_all_classes:
                     break
 
-                sampled_classes = set(
-                    sampled["label"].astype(int).unique()
-                )
+                sampled_classes = set(sampled["label"].astype(int).unique())
                 if sampled_classes == expected_classes:
                     break
             else:
@@ -251,7 +242,7 @@ def _bootstrap_samples_by_leadtime(
                 )
 
             yield int(leadtime), bootstrap, sampled
-            
+
 
 def bootstrap_brier_skill_score(
     merged_forecast: pd.DataFrame,
@@ -268,12 +259,10 @@ def bootstrap_brier_skill_score(
     n_bootstrap: Number of bootstrap samples to generate for each lead time.
     sample_fraction: Fraction of data to sample for each bootstrap iteration.
     random_state: Random seed for reproducibility.
-    
+
     Returns: DataFrame containing Brier skill scores for each lead time and bootstrap sample.
     """
-    probability_columns = [
-        str(cluster) for cluster in range(cluster_number)
-    ]
+    probability_columns = [str(cluster) for cluster in range(cluster_number)]
     results: list[dict[str, str | int | float]] = []
 
     samples = _bootstrap_samples_by_leadtime(
@@ -287,9 +276,7 @@ def bootstrap_brier_skill_score(
     for leadtime, bootstrap, sampled in samples:
         _, _, bss = metrics.calculate_forecast_brier_skill_score(
             y_true_labels=sampled["label"].to_numpy(),
-            y_forecast_prob=sampled[
-                probability_columns
-            ].to_numpy(),
+            y_forecast_prob=sampled[probability_columns].to_numpy(),
             n_classes=cluster_number,
         )
 
@@ -303,6 +290,7 @@ def bootstrap_brier_skill_score(
         )
 
     return pd.DataFrame.from_records(results)
+
 
 def roc_auc_by_leadtime(
     merged_forecast: pd.DataFrame,
@@ -322,9 +310,7 @@ def roc_auc_by_leadtime(
 
     Returns: DataFrame containing ROC AUC scores for each lead time and bootstrap sample.
     """
-    probability_columns = [
-        str(cluster) for cluster in range(cluster_number)
-    ]
+    probability_columns = [str(cluster) for cluster in range(cluster_number)]
     results: list[dict[str, str | int | float]] = []
 
     samples = _bootstrap_samples_by_leadtime(
@@ -338,9 +324,7 @@ def roc_auc_by_leadtime(
 
     for leadtime, bootstrap, sampled in samples:
         truth = sampled["label"].to_numpy(dtype=int)
-        prediction = sampled[
-            probability_columns
-        ].to_numpy(dtype=float)
+        prediction = sampled[probability_columns].to_numpy(dtype=float)
 
         score = roc_auc_score(
             truth,
@@ -361,6 +345,7 @@ def roc_auc_by_leadtime(
 
     return pd.DataFrame.from_records(results)
 
+
 def _plot_bss_and_roc(
     bss_data: pd.DataFrame,
     roc_data: pd.DataFrame,
@@ -372,7 +357,7 @@ def _plot_bss_and_roc(
     roc_data: DataFrame containing ROC AUC scores for each lead time and bootstrap sample.
     minimum_leadtime: Minimum lead time to display on the x-axis.
     maximum_leadtime: Maximum lead time to display on the x-axis.
-    
+
     Returns: Matplotlib figure and axes objects containing the BSS and ROC AUC plots."""
     fig, axes = plt.subplots(
         nrows=1,
